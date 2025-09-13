@@ -15,7 +15,6 @@
 
 - 前端: HTML5, CSS3, JavaScript
 - 后端: Node.js, Express
-- 数据库: MongoDB
 - 视频处理: FFmpeg
 
 ## 安装指南
