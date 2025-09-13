@@ -4,6 +4,9 @@
 
 一个基于Node.js的视频上传、处理和分享平台，支持多种视频格式转换、裁剪、压缩等操作。
 
+![alt text](/public/images/image.png)
+
+
 ## ✨ 功能特点
 
 - 视频上传与存储管理
@@ -58,6 +61,36 @@ npm run dev
 3. 开始处理并等待完成
 4. 下载处理后的文件
 
+## 🖼️ 操作流程
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="./public/images/image.png" alt="上传界面">
+      <div align="center"><b>1. 上传视频</b></div>
+      <div align="center">拖放或点击选择视频文件</div>
+    </td>
+    <td width="50%">
+      <img src="./public/images/image1.png" alt="视频预览">
+      <div align="center"><b>2. 预览视频</b></div>
+      <div align="center">查看视频信息和预览效果</div>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./public/images/image2.png" alt="处理选项">
+      <div align="center"><b>3. 选择处理选项</b></div>
+      <div align="center">设置格式、尺寸等参数</div>
+    </td>
+    <td width="50%">
+      <img src="./public/images/image4.png" alt="下载界面">
+      <div align="center"><b>4. 获取结果</b></div>
+      <div align="center">下载处理后的文件</div>
+    </td>
+  </tr>
+</table>
+
+
 ## 🤝 贡献指南
 
 欢迎提交Pull Request或Issue。
@@ -108,3 +141,13 @@ npm run dev
 - `npm test` - 运行测试
 - `npm run lint` - 代码检查
 - `npm run build` - 生产环境构建
+
+
+## 👥 贡献者
+
+感谢这些优秀的贡献者：
+
+[![Contributors](https://contrib.rocks/image?repo=Alleyf/VProOnline&max=10&columns=10&anon=1)](https://github.com/Alleyf/VProOnline/graphs/contributors)
+
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Alleyf/VProOnline&type=Date)](https://star-history.com/#Alleyf/VProOnline&Date)
