@@ -1,6 +1,4 @@
-# VProOnline 视频处理平台
-
-# MediaBunny - 在线视频处理平台
+# VProOnline 在线视频处理平台
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Alleyf/VProOnline)
 
