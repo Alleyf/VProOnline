@@ -1,5 +1,5 @@
 {
-  "name": "mediabunny-video-processor",
+  "name": "VProOnline",
   "version": "1.0.0",
   "description": "在线视频处理平台，支持转码、裁剪、尺寸调整等功能",
   "main": "app.js",
