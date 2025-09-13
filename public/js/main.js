@@ -551,7 +551,6 @@ function initUIInteractions() {
     // 重新上传按钮
     const restartUpload = document.getElementById('restart-upload');
     const uploadArea = document.getElementById('upload-area');
-    const processingOptions = document.getElementById('processing-options');
     
     if (restartUpload && uploadArea && processingOptions) {
         restartUpload.addEventListener('click', function() {
@@ -562,7 +561,6 @@ function initUIInteractions() {
     
     // 处理视频按钮
     const processBtn = document.getElementById('process-btn');
-    const processingProgress = document.getElementById('processing-progress');
     
     if (processBtn && processingProgress && processingOptions) {
         processBtn.addEventListener('click', function() {
