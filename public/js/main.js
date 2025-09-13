@@ -1,4 +1,4 @@
-// MediaBunny - 主JavaScript文件
+// VProOnline - 主JavaScript文件
 
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化应用
