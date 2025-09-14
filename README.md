@@ -1,10 +1,19 @@
 # VProOnline 在线视频处理平台
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Alleyf/VProOnline)
-
 一个基于Node.js的视频上传、处理和分享平台，支持多种视频格式转换、裁剪、压缩等操作。
 
-![alt text](/public/images/image.png)
+
+<div align="center">
+
+![VProOnline Preview](./public/images/image.png)
+
+### 🚀 快速部署
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Alleyf/VProOnline&project-name=vpro-online&repository-name=VProOnline)
+&nbsp;&nbsp;
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Alleyf/VProOnline)
+
+</div>
 
 
 ## ✨ 功能特点
@@ -95,9 +104,6 @@ npm run dev
 
 欢迎提交Pull Request或Issue。
 
-## 📄 许可证
-
-MIT
 
 ## 功能特性
 
@@ -148,6 +154,54 @@ npm run dev
 感谢这些优秀的贡献者：
 
 [![Contributors](https://contrib.rocks/image?repo=Alleyf/VProOnline&max=10&columns=10&anon=1)](https://github.com/Alleyf/VProOnline/graphs/contributors)
+
+
+## 📄 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。详情请查看 [LICENSE](LICENSE) 文件。
+
+## 💖 支持项目
+
+如果这个项目对你有帮助，欢迎通过以下方式支持我们：
+
+### ⭐ GitHub Star
+给我们一个 Star，这是对我们最大的鼓励！
+
+### ☕ 为爱发电
+
+<div align="center">
+
+![donate](https://github.com/Alleyf/pg-design/blob/main/assets/donate-qr.png)
+
+**如果你觉得这个项目有用，可以请开发者喝杯咖啡 ☕**
+
+</div>
+
+### 🎁 其他支持方式
+- 🐛 提交 Bug 报告
+- 💡 提出新功能建议
+- 📝 完善项目文档
+- 🔀 贡献代码
+- 📢 推荐给朋友
+
+## 📞 联系方式
+
+如有问题或建议，请通过以下方式联系：
+
+- 📋 提交 Issue
+- 💬 发起 Discussion
+
+---
+
+<div align="center">
+
+**⭐ 如果这个项目对你有帮助，请给我们一个 Star！**
+
+**Made with ❤️ by VProOnline Team**
+
+*让视频处理变得简单高效* 🎬
+
+</div>
 
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Alleyf/VProOnline&type=Date)](https://star-history.com/#Alleyf/VProOnline&Date)
