@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VProOnline - Blob Store 诊断工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">VProOnline - Blob Store 诊断工具</h1>
+        
+        <!-- Blob Store 状态检查 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Blob Store 连接状态</h2>
+            <button id="check-status" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                检查状态
+            </button>
+            <div id="status-result" class="mt-4 p-4 rounded hidden"></div>
+        </div>
+        
+        <!-- 视频列表测试 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">视频列表测试</h2>
+            <button id="test-list" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                获取视频列表
+            </button>
+            <div id="list-result" class="mt-4 p-4 rounded hidden"></div>
+        </div>
+        
+        <!-- 代理测试 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">代理端点测试</h2>
+            <div class="flex space-x-2 mb-4">
+                <input type="text" id="proxy-filename" placeholder="输入文件名（如：test.mp4）" 
+                       class="flex-1 px-3 py-2 border border-gray-300 rounded">
+                <button id="test-proxy" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    测试代理
+                </button>
+            </div>
+            <div id="proxy-result" class="mt-4 p-4 rounded hidden"></div>
+        </div>
+        
+        <!-- 上传测试 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">文件上传测试</h2>
+            <div class="mb-4">
+                <input type="file" id="test-upload-file" accept="video/*" 
+                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <button id="test-upload" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                测试上传
+            </button>
+            <div id="upload-result" class="mt-4 p-4 rounded hidden"></div>
+        </div>
+        
+        <!-- 控制台日志 -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">控制台日志</h2>
+            <div id="console-log" class="bg-gray-100 p-4 rounded h-64 overflow-y-auto font-mono text-sm"></div>
+            <button id="clear-log" class="mt-2 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                清空日志
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 日志功能
+        const consoleLog = document.getElementById('console-log');
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+
+        function addToLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `mb-1 ${type === 'error' ? 'text-red-600' : type === 'warn' ? 'text-yellow-600' : 'text-gray-700'}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            consoleLog.appendChild(logEntry);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            addToLog(args.join(' '), 'info');
+        };
+
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            addToLog(args.join(' '), 'error');
+        };
+
+        console.warn = function(...args) {
+            originalConsoleWarn.apply(console, args);
+            addToLog(args.join(' '), 'warn');
+        };
+
+        // 显示结果的辅助函数
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.className = `mt-4 p-4 rounded ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            element.classList.remove('hidden');
+        }
+
+        // 检查 Blob Store 状态
+        document.getElementById('check-status').addEventListener('click', async () => {
+            try {
+                console.log('检查 Blob Store 状态...');
+                const response = await fetch('/api/video/blob-status');
+                const data = await response.json();
+                console.log('Blob Store 状态:', data);
+                showResult('status-result', data, !data.success);
+            } catch (error) {
+                console.error('检查状态失败:', error);
+                showResult('status-result', { error: error.message }, true);
+            }
+        });
+
+        // 测试视频列表
+        document.getElementById('test-list').addEventListener('click', async () => {
+            try {
+                console.log('获取视频列表...');
+                const response = await fetch('/api/video/list');
+                const data = await response.json();
+                console.log('视频列表:', data);
+                showResult('list-result', data, !data.success);
+            } catch (error) {
+                console.error('获取列表失败:', error);
+                showResult('list-result', { error: error.message }, true);
+            }
+        });
+
+        // 测试代理端点
+        document.getElementById('test-proxy').addEventListener('click', async () => {
+            const filename = document.getElementById('proxy-filename').value.trim();
+            if (!filename) {
+                alert('请输入文件名');
+                return;
+            }
+
+            try {
+                console.log('测试代理端点:', filename);
+                const response = await fetch(`/api/video/proxy/${filename}`);
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: {},
+                    contentType: response.headers.get('content-type'),
+                    contentLength: response.headers.get('content-length')
+                };
+                
+                // 收集部分头信息
+                for (const [key, value] of response.headers.entries()) {
+                    result.headers[key] = value;
+                }
+
+                console.log('代理响应:', result);
+                showResult('proxy-result', result, response.status >= 400);
+            } catch (error) {
+                console.error('代理测试失败:', error);
+                showResult('proxy-result', { error: error.message }, true);
+            }
+        });
+
+        // 测试文件上传
+        document.getElementById('test-upload').addEventListener('click', async () => {
+            const fileInput = document.getElementById('test-upload-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('请选择一个视频文件');
+                return;
+            }
+
+            try {
+                console.log('开始上传文件:', file.name, '大小:', file.size);
+                const formData = new FormData();
+                formData.append('video', file);
+
+                const response = await fetch('/api/video/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log('上传结果:', data);
+                showResult('upload-result', data, !data.success);
+
+                // 如果上传成功，尝试测试视频预览
+                if (data.success && data.file) {
+                    console.log('创建视频预览测试...');
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.style.width = '100%';
+                    video.style.maxWidth = '400px';
+                    
+                    const testUrl = data.file.storage === 'blob' ? 
+                        `/api/video/proxy/${data.file.filename}` : 
+                        data.file.url;
+                    
+                    video.onerror = function() {
+                        console.error('视频预览失败:', testUrl);
+                    };
+                    
+                    video.oncanplay = function() {
+                        console.log('视频预览成功:', testUrl);
+                    };
+                    
+                    video.src = testUrl;
+                    
+                    const uploadResult = document.getElementById('upload-result');
+                    uploadResult.appendChild(document.createElement('hr'));
+                    uploadResult.appendChild(document.createTextNode('视频预览测试:'));
+                    uploadResult.appendChild(video);
+                }
+            } catch (error) {
+                console.error('上传测试失败:', error);
+                showResult('upload-result', { error: error.message }, true);
+            }
+        });
+
+        // 清空日志
+        document.getElementById('clear-log').addEventListener('click', () => {
+            consoleLog.innerHTML = '';
+            console.log('日志已清空');
+        });
+
+        // 页面加载时自动检查状态
+        window.addEventListener('load', () => {
+            console.log('VProOnline Blob Store 诊断工具已加载');
+            document.getElementById('check-status').click();
+        });
+    </script>
+</body>
+</html>

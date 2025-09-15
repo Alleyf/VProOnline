@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
+const blobService = require('./blobService');
 
 // 确保目录存在
 const ensureDirectoryExistence = (dirPath) => {
@@ -48,10 +49,23 @@ const getVideoInfo = (filePath) => {
 const activeProcesses = new Map();
 
 // 处理视频
-const processVideo = (inputFilename, options, progressCallback) => {
-  return new Promise((resolve, reject) => {
+const processVideo = (inputPath, options, progressCallback) => {
+  return new Promise(async (resolve, reject) => {
     try {
-      const inputPath = path.join(config.uploadDir, inputFilename);
+      // 如果传入的是文件名而不是完整路径，拼接上uploadDir
+      let actualInputPath;
+      if (path.isAbsolute(inputPath)) {
+        actualInputPath = inputPath;
+      } else {
+        actualInputPath = path.join(config.uploadDir, inputPath);
+      }
+      
+      console.log(`开始处理视频: ${actualInputPath}`);
+      
+      // 检查输入文件是否存在
+      if (!fs.existsSync(actualInputPath)) {
+        throw new Error(`输入文件不存在: ${actualInputPath}`);
+      }
       
       // 生成输出文件名和处理ID
       const processId = uuidv4();
@@ -65,7 +79,7 @@ const processVideo = (inputFilename, options, progressCallback) => {
       ensureDirectoryExistence(outputPath);
       
       // 创建FFmpeg命令
-      let command = ffmpeg(inputPath);
+      let command = ffmpeg(actualInputPath);
       
       // 裁剪处理
       if (options.crop) {
@@ -161,15 +175,51 @@ const processVideo = (inputFilename, options, progressCallback) => {
       });
       
       // 处理完成
-      command.on('end', () => {
-        // 从活动处理中移除
-        activeProcesses.delete(processId);
-        resolve({
-          processId: processId,
-          filename: outputFilename,
-          path: outputPath,
-          url: `${config.publicUrl}/processed/${outputFilename}`
-        });
+      command.on('end', async () => {
+        try {
+          // 从活动处理中移除
+          activeProcesses.delete(processId);
+          
+          let result = {
+            processId: processId,
+            filename: outputFilename,
+            path: outputPath
+          };
+          
+          // 如果启用了 Blob 存储，上传到 Blob Store
+          if (blobService.isBlobStorageAvailable()) {
+            try {
+              console.log('正在上传处理后的视频到 Blob Store...');
+              const blobResult = await blobService.uploadProcessedVideo(outputPath, outputFilename);
+              
+              result.url = blobResult.url;
+              result.blobUrl = blobResult.url;
+              result.storage = 'blob';
+              
+              // 上传成功后清理本地文件（可选）
+              if (config.blob.cleanupLocal !== false) {
+                await blobService.cleanupLocalFile(outputPath);
+              }
+              
+              console.log('视频已成功上传到 Blob Store:', blobResult.url);
+            } catch (blobError) {
+              console.error('上传到 Blob Store 失败，使用本地存储:', blobError);
+              // 如果 Blob 上传失败，回退到本地存储
+              result.url = `${config.publicUrl}/processed/${outputFilename}`;
+              result.storage = 'local';
+              result.error = 'Blob upload failed: ' + blobError.message;
+            }
+          } else {
+            // 使用本地存储
+            result.url = `${config.publicUrl}/processed/${outputFilename}`;
+            result.storage = 'local';
+          }
+          
+          resolve(result);
+        } catch (error) {
+          console.error('处理完成后的操作失败:', error);
+          reject(error);
+        }
       });
       
       // 存储命令到活动处理中
@@ -261,5 +311,6 @@ module.exports = {
   processVideo,
   cancelProcessing,
   cleanExpiredFiles,
-  ensureDirectoryExistence
+  ensureDirectoryExistence,
+  blobService
 };

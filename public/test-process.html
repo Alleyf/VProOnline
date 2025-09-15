@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试视频处理</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <h1>视频处理测试页面</h1>
+
+    <div class="section">
+        <h2>1. 获取视频列表</h2>
+        <button onclick="getVideoList()">获取视频列表</button>
+        <div id="videoList" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. 处理视频</h2>
+        <input type="text" id="videoFilename" placeholder="输入视频文件名" style="width: 300px; padding: 8px;">
+        <button onclick="processVideo()">开始处理</button>
+        <div id="processResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. 获取处理结果</h2>
+        <input type="text" id="processId" placeholder="输入处理ID" value="21868217-cb9a-4fa4-9a53-e66b7793ba83" style="width: 300px; padding: 8px;">
+        <button onclick="getProcessResult()">获取处理结果</button>
+        <div id="processResultInfo" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>4. 检查Blob Store状态</h2>
+        <button onclick="checkBlobStatus()">检查Blob Store状态</button>
+        <div id="blobStatus" class="result"></div>
+    </div>
+
+    <script>
+        async function getVideoList() {
+            const resultDiv = document.getElementById('videoList');
+            resultDiv.innerHTML = '获取中...';
+            
+            try {
+                const response = await fetch('/api/video/list');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>视频列表 (存储方式: ${data.storage})</h3>
+                        <ul>
+                            ${data.videos.map(video => `
+                                <li>
+                                    <strong>${video.filename}</strong> 
+                                    (大小: ${(video.size / 1024 / 1024).toFixed(2)}MB)
+                                    ${video.storage === 'blob' ? ' [云存储]' : ' [本地存储]'}
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '获取失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        async function processVideo() {
+            const filename = document.getElementById('videoFilename').value.trim();
+            const resultDiv = document.getElementById('processResult');
+            
+            if (!filename) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请输入视频文件名';
+                return;
+            }
+            
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = '处理中...';
+            
+            try {
+                const response = await fetch('/api/video/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: filename,
+                        options: {
+                            format: 'mp4',
+                            compress: {
+                                crf: 23
+                            }
+                        }
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>处理成功！</h3>
+                        <p>处理ID: ${data.result.processId}</p>
+                        <p>输出文件: ${data.result.filename}</p>
+                        <p>存储方式: ${data.result.storage}</p>
+                        ${data.result.url ? `<p>下载链接: <a href="${data.result.url}" target="_blank">${data.result.url}</a></p>` : ''}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '处理失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        async function checkBlobStatus() {
+            const resultDiv = document.getElementById('blobStatus');
+            resultDiv.innerHTML = '检查中...';
+            
+            try {
+                const response = await fetch('/api/video/blob-status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>Blob Store 状态</h3>
+                        <p>启用状态: ${data.status.enabled ? '已启用' : '未启用'}</p>
+                        <p>Token配置: ${data.status.token ? '已配置' : '未配置'}</p>
+                        <p>连接状态: ${data.status.connection}</p>
+                        ${data.status.error ? `<p>错误信息: ${data.status.error}</p>` : ''}
+                        <p>上传前缀: ${data.status.uploadPrefix}</p>
+                        <p>处理前缀: ${data.status.processedPrefix}</p>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '检查失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        async function getProcessResult() {
+            const processId = document.getElementById('processId').value.trim();
+            const resultDiv = document.getElementById('processResultInfo');
+            
+            if (!processId) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请输入处理ID';
+                return;
+            }
+            
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = '获取中...';
+            
+            try {
+                const response = await fetch(`/api/video/process-result/${processId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>处理结果信息</h3>
+                        <p>处理ID: ${data.result.processId}</p>
+                        <p>文件名: ${data.result.filename || '无'}</p>
+                        <p>音频文件: ${data.result.audioFilename || '无'}</p>
+                        <p>存储方式: ${data.result.storage}</p>
+                        ${data.result.url ? `<p>下载链接: <a href="${data.result.url}" target="_blank">${data.result.url}</a></p>` : ''}
+                        ${data.result.audioUrl ? `<p>音频链接: <a href="${data.result.audioUrl}" target="_blank">${data.result.audioUrl}</a></p>` : ''}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '获取失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        // 页面加载时自动获取视频列表
+        window.onload = function() {
+            getVideoList();
+        };
+    </script>
+</body>
+</html>

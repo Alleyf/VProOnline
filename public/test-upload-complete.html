@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完整上传进度测试 - VProOnline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .log-entry {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .phase-browser_upload { color: #3B82F6; }
+        .phase-server_upload { color: #EF4444; }
+        .phase-video_analysis { color: #F59E0B; }
+        .phase-blob_upload_start { color: #8B5CF6; }
+        .phase-blob_upload_complete { color: #10B981; }
+        .phase-complete { color: #059669; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-6 text-center">完整上传进度测试</h1>
+        
+        <!-- 文件选择 -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">选择视频文件</label>
+            <input type="file" id="file-input" accept="video/*" class="w-full p-3 border border-gray-300 rounded-lg">
+        </div>
+        
+        <!-- 上传按钮 -->
+        <button id="upload-btn" class="w-full bg-blue-500 text-white py-3 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed mb-6">
+            <span id="upload-btn-text">开始上传</span>
+        </button>
+        
+        <!-- 上传进度 -->
+        <div id="upload-progress-container" class="mb-6 hidden">
+            <div class="flex justify-between mb-2">
+                <span id="upload-filename" class="text-gray-600 font-medium"></span>
+                <span id="upload-percentage" class="text-blue-600 font-bold">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-4 mb-2">
+                <div id="upload-progress-bar" class="bg-blue-500 h-4 rounded-full progress-bar" style="width: 0%">
+                    <div class="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"></div>
+                </div>
+            </div>
+            <div id="upload-status-message" class="text-sm text-gray-600 text-center mb-3">准备上传...</div>
+            <div class="text-center">
+                <button id="cancel-upload-btn" class="px-4 py-2 text-sm text-gray-600 hover:text-red-600 transition-colors border border-gray-300 rounded">
+                    取消上传
+                </button>
+            </div>
+        </div>
+        
+        <!-- 阶段指示器 -->
+        <div id="phase-indicators" class="mb-6 hidden">
+            <div class="flex justify-between text-xs">
+                <div id="phase-browser" class="flex flex-col items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mb-1"></div>
+                    <span>浏览器上传</span>
+                </div>
+                <div id="phase-server" class="flex flex-col items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mb-1"></div>
+                    <span>服务器处理</span>
+                </div>
+                <div id="phase-analysis" class="flex flex-col items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mb-1"></div>
+                    <span>视频分析</span>
+                </div>
+                <div id="phase-blob" class="flex flex-col items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mb-1"></div>
+                    <span>云存储</span>
+                </div>
+                <div id="phase-done" class="flex flex-col items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mb-1"></div>
+                    <span>完成</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 状态信息 -->
+        <div id="status" class="mb-6 p-4 bg-gray-100 rounded-lg text-sm hidden"></div>
+        
+        <!-- 实时日志 -->
+        <div class="mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-medium">实时日志</h3>
+                <button id="clear-log-btn" class="text-xs text-blue-600 hover:text-blue-800">清除日志</button>
+            </div>
+            <div id="debug-log" class="bg-black text-green-400 p-4 rounded text-xs h-64 overflow-y-auto font-mono"></div>
+        </div>
+        
+        <!-- 结果显示 -->
+        <div id="result-section" class="hidden">
+            <h3 class="font-medium mb-2">上传结果</h3>
+            <div id="result-content" class="bg-green-50 border border-green-200 rounded-lg p-4"></div>
+        </div>
+    </div>
+
+    <script>
+        // 调试日志函数
+        function debugLog(message, type = 'info') {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const typeColors = {
+                'info': 'text-green-400',
+                'warn': 'text-yellow-400', 
+                'error': 'text-red-400',
+                'success': 'text-blue-400'
+            };
+            
+            const colorClass = typeColors[type] || 'text-green-400';
+            logDiv.innerHTML += `<div class="${colorClass}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // 更新阶段指示器
+        function updatePhaseIndicator(phase) {
+            const phases = ['browser_upload', 'server_upload', 'video_analysis', 'blob_upload_start', 'complete'];
+            const phaseMapping = {
+                'start': 'browser',
+                'browser_upload': 'browser',
+                'server_upload': 'server', 
+                'video_analysis': 'analysis',
+                'blob_upload_start': 'blob',
+                'blob_upload_complete': 'blob',
+                'complete': 'done'
+            };
+            
+            const elementId = phaseMapping[phase];
+            if (elementId) {
+                // 重置所有指示器
+                document.querySelectorAll('#phase-indicators .w-3').forEach(el => {
+                    el.className = 'w-3 h-3 rounded-full bg-gray-300 mb-1';
+                });
+                
+                // 激活当前阶段
+                const element = document.querySelector(`#phase-${elementId} .w-3`);
+                if (element) {
+                    element.className = 'w-3 h-3 rounded-full bg-blue-500 mb-1';
+                }
+            }
+        }
+
+        // 存储当前上传的对象
+        let currentUploadXhr = null;
+
+        // 显示上传进度
+        function showUploadProgress(show) {
+            debugLog(`${show ? '显示' : '隐藏'}上传进度容器`);
+            
+            const progressContainer = document.getElementById('upload-progress-container');
+            const phaseIndicators = document.getElementById('phase-indicators');
+            
+            if (progressContainer) {
+                if (show) {
+                    progressContainer.classList.remove('hidden');
+                    phaseIndicators.classList.remove('hidden');
+                } else {
+                    progressContainer.classList.add('hidden'); 
+                    phaseIndicators.classList.add('hidden');
+                }
+            }
+        }
+
+        // 更新上传进度
+        function updateUploadProgress(percentage, message, phase) {
+            debugLog(`进度更新: ${percentage}% - ${message} (${phase})`, 'info');
+            
+            const progressBar = document.getElementById('upload-progress-bar');
+            const progressText = document.getElementById('upload-percentage');
+            const statusMessage = document.getElementById('upload-status-message');
+            
+            if (progressBar) {
+                progressBar.style.width = percentage + '%';
+            }
+            
+            if (progressText) {
+                progressText.textContent = Math.round(percentage) + '%';
+            }
+            
+            if (statusMessage && message) {
+                statusMessage.textContent = message;
+            }
+            
+            // 更新阶段指示器
+            updatePhaseIndicator(phase);
+        }
+
+        // 使用 XMLHttpRequest 实现带进度的文件上传（带 SSE 实时进度）
+        function uploadFileWithProgress(file, onProgress, onSuccess, onError) {
+            debugLog(`开始创建上传请求 - 文件: ${file.name}, 大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`, 'info');
+            
+            // 生成会话ID
+            const sessionId = 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            debugLog(`生成上传会话ID: ${sessionId}`, 'info');
+            
+            // 创建SSE连接监听服务器端进度
+            const eventSource = new EventSource(`/api/video/upload-progress/${sessionId}`);
+            
+            eventSource.onopen = function() {
+                debugLog('SSE连接已建立', 'success');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    debugLog(`收到SSE消息: ${data.type} - ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'progress') {
+                        if (onProgress) {
+                            onProgress(data.progress, data.message, data.phase);
+                        }
+                    } else if (data.type === 'complete') {
+                        debugLog('服务器端处理完成', 'success');
+                        eventSource.close();
+                        if (onSuccess) {
+                            onSuccess(data.result);
+                        }
+                    } else if (data.type === 'error') {
+                        debugLog(`服务器端处理错误: ${data.message}`, 'error');
+                        eventSource.close();
+                        if (onError) {
+                            onError(new Error(data.message));
+                        }
+                    }
+                } catch (error) {
+                    debugLog(`解析SSE消息失败: ${error.message}`, 'error');
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                debugLog('SSE连接错误', 'error');
+                eventSource.close();
+            };
+            
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('video', file);
+            formData.append('sessionId', sessionId);
+            
+            // 浏览器上传进度监听（约占总进度的30%）
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const browserProgress = (e.loaded / e.total) * 30;
+                    debugLog(`浏览器上传进度: ${browserProgress.toFixed(2)}%`, 'info');
+                    if (onProgress) {
+                        onProgress(browserProgress, '正在上传到服务器...', 'browser_upload');
+                    }
+                }
+            });
+            
+            xhr.upload.addEventListener('loadstart', function() {
+                debugLog('浏览器上传开始', 'info');
+                if (onProgress) {
+                    onProgress(0, '开始上传...', 'start');
+                }
+            });
+            
+            xhr.addEventListener('load', function() {
+                debugLog(`浏览器上传请求完成，状态码: ${xhr.status}`, 'info');
+                
+                if (xhr.status !== 200) {
+                    debugLog(`浏览器上传失败，状态码: ${xhr.status}`, 'error');
+                    eventSource.close();
+                    if (onError) {
+                        onError(new Error('上传失败，状态码: ' + xhr.status));
+                    }
+                }
+            });
+            
+            xhr.addEventListener('error', function() {
+                debugLog('浏览器上传发生网络错误', 'error');
+                eventSource.close();
+                if (onError) {
+                    onError(new Error('网络错误'));
+                }
+            });
+            
+            xhr.addEventListener('abort', function() {
+                debugLog('浏览器上传被中断', 'warn');
+                eventSource.close();
+            });
+            
+            xhr.timeout = 10 * 60 * 1000;
+            
+            debugLog('发送上传请求到: /api/video/upload', 'info');
+            xhr.open('POST', '/api/video/upload');
+            xhr.send(formData);
+            
+            return {
+                xhr: xhr,
+                eventSource: eventSource,
+                abort: function() {
+                    xhr.abort();
+                    eventSource.close();
+                }
+            };
+        }
+
+        // 取消当前上传
+        function cancelCurrentUpload() {
+            if (currentUploadXhr) {
+                debugLog('取消当前上传', 'warn');
+                currentUploadXhr.abort();
+                currentUploadXhr = null;
+                showUploadProgress(false);
+                updateStatus('上传已取消', 'warning');
+                enableUploadButton();
+            }
+        }
+
+        // 更新状态
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'mb-6 p-4 rounded-lg text-sm ';
+            
+            switch(type) {
+                case 'success':
+                    statusDiv.className += 'bg-green-100 text-green-800 border border-green-200';
+                    break;
+                case 'error':
+                    statusDiv.className += 'bg-red-100 text-red-800 border border-red-200';
+                    break;
+                case 'warning':
+                    statusDiv.className += 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+                    break;
+                default:
+                    statusDiv.className += 'bg-blue-100 text-blue-800 border border-blue-200';
+            }
+            
+            statusDiv.classList.remove('hidden');
+        }
+
+        // 显示结果
+        function showResult(result) {
+            const resultSection = document.getElementById('result-section');
+            const resultContent = document.getElementById('result-content');
+            
+            let resultHtml = `
+                <div class="space-y-2">
+                    <p><strong>文件名:</strong> ${result.originalname}</p>
+                    <p><strong>大小:</strong> ${(result.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>存储位置:</strong> ${result.storage === 'blob' ? 'Vercel Blob Store' : '本地存储'}</p>
+                    ${result.url ? `<p><strong>访问地址:</strong> <a href="${result.url}" target="_blank" class="text-blue-600 hover:underline">查看视频</a></p>` : ''}
+                    ${result.videoInfo ? `
+                        <div class="mt-3">
+                            <p><strong>视频信息:</strong></p>
+                            <ul class="ml-4 text-sm">
+                                <li>格式: ${result.videoInfo.format || 'N/A'}</li>
+                                <li>时长: ${result.videoInfo.duration || 'N/A'}秒</li>
+                                <li>分辨率: ${result.videoInfo.width || 'N/A'} x ${result.videoInfo.height || 'N/A'}</li>
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            resultContent.innerHTML = resultHtml;
+            resultSection.classList.remove('hidden');
+        }
+
+        // 启用/禁用上传按钮
+        function enableUploadButton(enabled = true) {
+            const uploadBtn = document.getElementById('upload-btn');
+            const uploadBtnText = document.getElementById('upload-btn-text');
+            
+            uploadBtn.disabled = !enabled;
+            uploadBtnText.textContent = enabled ? '开始上传' : '上传中...';
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('页面加载完成，初始化上传测试', 'success');
+            
+            const fileInput = document.getElementById('file-input');
+            const uploadBtn = document.getElementById('upload-btn');
+            const cancelBtn = document.getElementById('cancel-upload-btn');
+            const clearLogBtn = document.getElementById('clear-log-btn');
+            
+            // 上传按钮点击事件
+            uploadBtn.addEventListener('click', function() {
+                const file = fileInput.files[0];
+                if (!file) {
+                    updateStatus('请选择文件', 'error');
+                    debugLog('错误: 未选择文件', 'error');
+                    return;
+                }
+                
+                if (!file.type.startsWith('video/')) {
+                    updateStatus('请选择视频文件', 'error');
+                    debugLog('错误: 文件类型不是视频', 'error');
+                    return;
+                }
+                
+                debugLog(`开始上传文件: ${file.name}`, 'success');
+                
+                // 隐藏结果区域
+                document.getElementById('result-section').classList.add('hidden');
+                
+                // 显示文件名
+                document.getElementById('upload-filename').textContent = file.name;
+                
+                // 显示进度并开始上传
+                showUploadProgress(true);
+                updateUploadProgress(0, '准备上传...', 'start');
+                updateStatus('正在上传...', 'info');
+                
+                // 禁用上传按钮
+                enableUploadButton(false);
+                
+                currentUploadXhr = uploadFileWithProgress(
+                    file,
+                    // 进度回调
+                    function(percentage, message, phase) {
+                        updateUploadProgress(percentage, message, phase);
+                    },
+                    // 成功回调
+                    function(result) {
+                        debugLog(`上传成功: ${JSON.stringify(result)}`, 'success');
+                        showUploadProgress(false);
+                        currentUploadXhr = null;
+                        enableUploadButton();
+                        
+                        updateStatus('上传完成！', 'success');
+                        showResult(result);
+                    },
+                    // 错误回调
+                    function(error) {
+                        debugLog(`上传错误: ${error.message}`, 'error');
+                        showUploadProgress(false);
+                        currentUploadXhr = null;
+                        enableUploadButton();
+                        updateStatus('上传出错: ' + error.message, 'error');
+                    }
+                );
+            });
+            
+            // 取消按钮点击事件
+            cancelBtn.addEventListener('click', cancelCurrentUpload);
+            
+            // 清除日志按钮
+            clearLogBtn.addEventListener('click', function() {
+                document.getElementById('debug-log').innerHTML = '';
+                debugLog('日志已清除', 'info');
+            });
+        });
+    </script>
+</body>
+</html>

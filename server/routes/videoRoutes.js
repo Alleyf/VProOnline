@@ -4,7 +4,9 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const fetch = require('node-fetch');
 const videoService = require('../services/videoService');
+const blobService = require('../services/blobService');
 const config = require('../config');
 
 // 配置Multer上传
@@ -39,8 +41,62 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
-// 上传视频
+// 存储上传会话信息
+const uploadSessions = new Map();
+
+// 上传进度事件流
+router.get('/upload-progress/:sessionId', (req, res) => {
+  const sessionId = req.params.sessionId;
+  
+  // 设置 SSE 头
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+  
+  // 发送初始消息
+  res.write(`data: ${JSON.stringify({ type: 'connected', sessionId })}\n\n`);
+  
+  // 保存连接以便后续发送进度更新
+  if (!uploadSessions.has(sessionId)) {
+    uploadSessions.set(sessionId, { connections: [] });
+  }
+  uploadSessions.get(sessionId).connections.push(res);
+  
+  // 客户端断开连接时清理
+  req.on('close', () => {
+    const session = uploadSessions.get(sessionId);
+    if (session) {
+      session.connections = session.connections.filter(conn => conn !== res);
+      if (session.connections.length === 0) {
+        uploadSessions.delete(sessionId);
+      }
+    }
+  });
+});
+
+// 发送进度更新
+function sendProgressUpdate(sessionId, data) {
+  const session = uploadSessions.get(sessionId);
+  if (session) {
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    session.connections.forEach(res => {
+      try {
+        res.write(message);
+      } catch (error) {
+        console.error('发送进度更新失败:', error);
+      }
+    });
+  }
+}
+
+// 上传视频（分阶段处理）
 router.post('/upload', upload.single('video'), async (req, res) => {
+  const sessionId = req.body.sessionId || uuidv4();
+  
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -49,6 +105,14 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       });
     }
     
+    // 第一阶段：文件已上传到服务器 (30%)
+    sendProgressUpdate(sessionId, {
+      type: 'progress',
+      phase: 'server_upload',
+      progress: 30,
+      message: '文件已上传到服务器，正在分析视频信息...'
+    });
+    
     // 获取视频信息
     const videoInfo = await videoService.getVideoInfo(req.file.path);
     
@@ -56,23 +120,131 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     const originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const name = path.basename(originalname, path.extname(originalname));
     
+    let result = {
+      filename: req.file.filename,
+      originalname: originalname,
+      name: name,
+      size: req.file.size,
+      path: req.file.path,
+      videoInfo: videoInfo,
+      storage: 'local',
+      sessionId: sessionId
+    };
+    
+    // 第二阶段：视频信息分析完成 (50%)
+    sendProgressUpdate(sessionId, {
+      type: 'progress',
+      phase: 'video_analysis',
+      progress: 50,
+      message: '视频分析完成，准备上传到云存储...'
+    });
+    
+    // 如果启用了 Blob 存储，上传到 Blob Store
+    if (blobService.isBlobStorageAvailable()) {
+      try {
+        console.log('正在上传原始视频到 Blob Store...');
+        
+        // 第三阶段：开始上传到 Blob Store (60%)
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          phase: 'blob_upload_start',
+          progress: 60,
+          message: '正在上传到云存储...'
+        });
+        
+        // 使用带进度回调的上传函数
+        const blobResult = await blobService.uploadRawVideo(
+          req.file.path, 
+          req.file.filename,
+          // 进度回调（从60%到90%）
+          (blobProgress) => {
+            const adjustedProgress = 60 + (blobProgress * 0.3); // 60% + (blob进度 * 30%)
+            sendProgressUpdate(sessionId, {
+              type: 'progress',
+              phase: 'blob_uploading',
+              progress: adjustedProgress,
+              message: `云存储上传中... ${Math.round(blobProgress)}%`
+            });
+          }
+        );
+        
+        result.url = blobResult.url;
+        result.blobUrl = blobResult.url;
+        result.storage = 'blob';
+        
+        // 第四阶段：Blob 上传完成 (90%)
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          phase: 'blob_upload_complete',
+          progress: 90,
+          message: '云存储上传完成，正在清理临时文件...'
+        });
+        
+        // 上传成功后清理本地文件（可选）
+        if (config.blob.cleanupLocal !== false) {
+          await blobService.cleanupLocalFile(req.file.path);
+        }
+        
+        console.log('原始视频已成功上传到 Blob Store:', blobResult.url);
+      } catch (blobError) {
+        console.error('上传到 Blob Store 失败，使用本地存储:', blobError);
+        
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          phase: 'blob_upload_error',
+          progress: 80,
+          message: '云存储上传失败，回退到本地存储...'
+        });
+        
+        // 如果 Blob 上传失败，回退到本地存储
+        result.url = `${config.publicUrl}/uploads/${req.file.filename}`;
+        result.storage = 'local';
+        result.error = 'Blob upload failed: ' + blobError.message;
+      }
+    } else {
+      // 使用本地存储
+      result.url = `${config.publicUrl}/uploads/${req.file.filename}`;
+      
+      sendProgressUpdate(sessionId, {
+        type: 'progress',
+        phase: 'local_storage',
+        progress: 90,
+        message: '使用本地存储，准备完成...'
+      });
+    }
+    
+    // 最终阶段：完成 (100%)
+    sendProgressUpdate(sessionId, {
+      type: 'complete',
+      phase: 'complete',
+      progress: 100,
+      message: '上传完成！',
+      result: result
+    });
+    
     res.json({
       success: true,
-      file: {
-        filename: req.file.filename,
-        originalname: originalname,
-        name: name,
-        size: req.file.size,
-        path: req.file.path,
-        url: `${config.publicUrl}/uploads/${req.file.filename}`,
-        videoInfo: videoInfo
-      }
+      file: result,
+      sessionId: sessionId
     });
+    
+    // 延迟清理会话信息
+    setTimeout(() => {
+      uploadSessions.delete(sessionId);
+    }, 5000);
+    
   } catch (error) {
     console.error('视频上传错误:', error);
+    
+    sendProgressUpdate(sessionId, {
+      type: 'error',
+      message: '上传失败: ' + error.message
+    });
+    
     res.status(500).json({
       success: false,
-      message: '视频上传失败: ' + error.message
+      message: '视频上传失败: ' + error.message,
+      sessionId: sessionId
     });
   }
 });
@@ -89,26 +261,74 @@ router.post('/process', async (req, res) => {
       });
     }
     
-    const inputPath = path.join(config.uploadDir, filename);
+    let inputPath = path.join(config.uploadDir, filename);
+    let needsCleanup = false;
     
-    // 检查文件是否存在
+    // 检查本地文件是否存在
     if (!fs.existsSync(inputPath)) {
-      return res.status(404).json({
-        success: false,
-        message: '视频文件不存在'
-      });
+      console.log(`本地文件不存在: ${inputPath}，尝试从Blob Store下载...`);
+      
+      // 如果本地文件不存在且启用了Blob存储，尝试从Blob Store下载
+      if (blobService.isBlobStorageAvailable()) {
+        try {
+          // 查找Blob Store中的文件
+          const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
+          const targetBlob = uploadBlobs.find(blob => blob.pathname.endsWith(filename));
+          
+          if (targetBlob) {
+            console.log(`找到Blob文件: ${targetBlob.url}`);
+            
+            // 下载文件到临时位置
+            const tempPath = path.join(config.uploadDir, `temp_${filename}`);
+            await downloadBlobToLocal(targetBlob.url, tempPath);
+            
+            inputPath = tempPath;
+            needsCleanup = true;
+            console.log(`文件已下载到: ${tempPath}`);
+          } else {
+            return res.status(404).json({
+              success: false,
+              message: '在Blob Store中找不到视频文件'
+            });
+          }
+        } catch (blobError) {
+          console.error('从Blob Store下载文件失败:', blobError);
+          return res.status(500).json({
+            success: false,
+            message: '从云存储下载文件失败: ' + blobError.message
+          });
+        }
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: '视频文件不存在且未启用云存储'
+        });
+      }
     }
+    
+    console.log(`开始处理视频: ${inputPath}`);
     
     // 处理视频
     // 注意：实际生产环境中应使用队列和WebSocket来处理长时间运行的任务
     const result = await videoService.processVideo(
-      filename, 
+      path.basename(inputPath), // 只传递文件名
       options || {},
       (progress) => {
         // 这里可以通过WebSocket发送进度更新
         console.log(`处理进度: ${progress}%`);
       }
     );
+    
+    // 如果使用了临时文件，清理它
+    if (needsCleanup && fs.existsSync(inputPath)) {
+      try {
+        fs.unlinkSync(inputPath);
+        console.log(`临时文件已清理: ${inputPath}`);
+      } catch (cleanupError) {
+        console.error('清理临时文件失败:', cleanupError);
+        // 不影响主要流程，只记录错误
+      }
+    }
     
     res.json({
       success: true,
@@ -122,6 +342,30 @@ router.post('/process', async (req, res) => {
     });
   }
 });
+
+// 从Blob Store下载文件到本地的辅助函数
+async function downloadBlobToLocal(blobUrl, localPath) {
+  const fetch = require('node-fetch');
+  
+  console.log(`开始下载: ${blobUrl} -> ${localPath}`);
+  
+  const response = await fetch(blobUrl);
+  if (!response.ok) {
+    throw new Error(`下载失败，状态码: ${response.status}`);
+  }
+  
+  // 确保目录存在
+  const dir = path.dirname(localPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  
+  // 写入文件
+  const buffer = await response.buffer();
+  fs.writeFileSync(localPath, buffer);
+  
+  console.log(`文件下载完成: ${localPath}, 大小: ${buffer.length} bytes`);
+}
 
 // 下载视频
 router.get('/download/:filename', (req, res) => {
@@ -183,7 +427,7 @@ router.post('/cancel-process', (req, res) => {
 });
 
 // 获取处理结果信息
-router.get('/process-result/:processId', (req, res) => {
+router.get('/process-result/:processId', async (req, res) => {
   try {
     const processId = req.params.processId;
     
@@ -194,14 +438,67 @@ router.get('/process-result/:processId', (req, res) => {
       });
     }
     
-    // 查找处理结果文件
-    const files = fs.readdirSync(config.processedDir);
+    let videoFile = null;
+    let audioFile = null;
+    let videoUrl = null;
+    let audioUrl = null;
+    let storage = 'local';
     
-    // 查找视频文件（不以_audio结尾的文件）
-    const videoFile = files.find(file => file.startsWith(processId) && !file.endsWith('_audio.mp3'));
+    // 首先检查本地文件
+    try {
+      const files = fs.readdirSync(config.processedDir);
+      
+      // 查找视频文件（不以_audio结尾的文件）
+      videoFile = files.find(file => file.startsWith(processId) && !file.endsWith('_audio.mp3'));
+      
+      // 查找音频文件（以_audio结尾的文件）
+      audioFile = files.find(file => file.startsWith(processId) && file.endsWith('_audio.mp3'));
+      
+      if (videoFile) {
+        videoUrl = `${config.publicUrl}/processed/${videoFile}`;
+      }
+      if (audioFile) {
+        audioUrl = `${config.publicUrl}/processed/${audioFile}`;
+      }
+    } catch (localError) {
+      console.log('读取本地处理目录失败:', localError.message);
+    }
     
-    // 查找音频文件（以_audio结尾的文件）
-    const audioFile = files.find(file => file.startsWith(processId) && file.endsWith('_audio.mp3'));
+    // 如果本地没有找到文件，且启用了Blob存储，尝试从Blob Store查找
+    if (!videoFile && !audioFile && blobService.isBlobStorageAvailable()) {
+      try {
+        console.log(`在Blob Store中查找处理结果: ${processId}`);
+        const processedBlobs = await blobService.listBlobFiles(config.blob.processedPrefix);
+        
+        // 查找视频文件
+        const videoBlobFile = processedBlobs.find(blob => {
+          const filename = path.basename(blob.pathname);
+          return filename.startsWith(processId) && !filename.endsWith('_audio.mp3');
+        });
+        
+        // 查找音频文件
+        const audioBlobFile = processedBlobs.find(blob => {
+          const filename = path.basename(blob.pathname);
+          return filename.startsWith(processId) && filename.endsWith('_audio.mp3');
+        });
+        
+        if (videoBlobFile) {
+          videoFile = path.basename(videoBlobFile.pathname);
+          videoUrl = videoBlobFile.url;
+          storage = 'blob';
+        }
+        
+        if (audioBlobFile) {
+          audioFile = path.basename(audioBlobFile.pathname);
+          audioUrl = audioBlobFile.url;
+          storage = 'blob';
+        }
+        
+        console.log(`Blob Store查找结果: video=${!!videoBlobFile}, audio=${!!audioBlobFile}`);
+      } catch (blobError) {
+        console.error('从Blob Store查找处理结果失败:', blobError);
+      }
+    }
     
     if (!videoFile && !audioFile) {
       return res.status(404).json({
@@ -216,9 +513,10 @@ router.get('/process-result/:processId', (req, res) => {
       result: {
         processId: processId,
         filename: videoFile || null,
-        url: videoFile ? `${config.publicUrl}/processed/${videoFile}` : null,
+        url: videoUrl,
         audioFilename: audioFile || null,
-        audioUrl: audioFile ? `${config.publicUrl}/processed/${audioFile}` : null
+        audioUrl: audioUrl,
+        storage: storage
       }
     });
   } catch (error) {
@@ -233,58 +531,90 @@ router.get('/process-result/:processId', (req, res) => {
 // 获取视频列表
 router.get('/list', async (req, res) => {
   try {
-    // 读取上传目录中的所有文件
-    const files = fs.readdirSync(config.uploadDir);
+    let videos = [];
     
-    // 过滤出视频文件并获取信息
-    const videoPromises = files
-      .filter(file => {
-        const ext = path.extname(file).toLowerCase();
-        return config.supportedVideoFormats.includes(ext.substring(1));
-      })
-      .map(async (file) => {
-        const filePath = path.join(config.uploadDir, file);
-        const stats = fs.statSync(filePath);
+    // 如果启用了 Blob 存储，从 Blob Store 获取列表
+    if (blobService.isBlobStorageAvailable()) {
+      try {
+        console.log('从 Blob Store 获取视频列表...');
+        const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
         
-        try {
-          // 获取视频信息
-          const videoInfo = await videoService.getVideoInfo(filePath);
-          
-          return {
-            id: path.basename(file, path.extname(file)),
-            filename: file,
-            name: path.basename(file, path.extname(file)),
-            path: filePath,
-            url: `${config.publicUrl}/uploads/${file}`,
-            size: stats.size,
-            uploadDate: stats.ctime,
-            duration: videoInfo.duration,
-            width: videoInfo.width,
-            height: videoInfo.height,
-            format: videoInfo.format
-          };
-        } catch (error) {
-          console.error(`获取视频信息失败: ${file}`, error);
-          
-          // 返回基本信息
-          return {
-            id: path.basename(file, path.extname(file)),
-            filename: file,
-            name: path.basename(file, path.extname(file)),
-            path: filePath,
-            url: `${config.publicUrl}/uploads/${file}`,
-            size: stats.size,
-            uploadDate: stats.ctime
-          };
-        }
-      });
+        videos = uploadBlobs.map(blob => ({
+          id: path.basename(blob.pathname, path.extname(blob.pathname)),
+          filename: path.basename(blob.pathname),
+          name: path.basename(blob.pathname, path.extname(blob.pathname)),
+          url: blob.url,
+          blobUrl: blob.url,
+          size: blob.size,
+          uploadDate: blob.uploadedAt,
+          storage: 'blob'
+        }));
+        
+        console.log(`从 Blob Store 获取到 ${videos.length} 个视频`);
+      } catch (blobError) {
+        console.error('从 Blob Store 获取列表失败:', blobError);
+        // 如果 Blob 获取失败，回退到本地存储
+      }
+    }
     
-    // 等待所有视频信息获取完成
-    const videos = await Promise.all(videoPromises);
+    // 如果没有启用 Blob 存储或获取失败，从本地获取
+    if (videos.length === 0) {
+      // 读取上传目录中的所有文件
+      const files = fs.readdirSync(config.uploadDir);
+      
+      // 过滤出视频文件并获取信息
+      const videoPromises = files
+        .filter(file => {
+          const ext = path.extname(file).toLowerCase();
+          return config.supportedVideoFormats.includes(ext.substring(1));
+        })
+        .map(async (file) => {
+          const filePath = path.join(config.uploadDir, file);
+          const stats = fs.statSync(filePath);
+          
+          try {
+            // 获取视频信息
+            const videoInfo = await videoService.getVideoInfo(filePath);
+            
+            return {
+              id: path.basename(file, path.extname(file)),
+              filename: file,
+              name: path.basename(file, path.extname(file)),
+              path: filePath,
+              url: `${config.publicUrl}/uploads/${file}`,
+              size: stats.size,
+              uploadDate: stats.ctime,
+              duration: videoInfo.duration,
+              width: videoInfo.width,
+              height: videoInfo.height,
+              format: videoInfo.format,
+              storage: 'local'
+            };
+          } catch (error) {
+            console.error(`获取视频信息失败: ${file}`, error);
+            
+            // 返回基本信息
+            return {
+              id: path.basename(file, path.extname(file)),
+              filename: file,
+              name: path.basename(file, path.extname(file)),
+              path: filePath,
+              url: `${config.publicUrl}/uploads/${file}`,
+              size: stats.size,
+              uploadDate: stats.ctime,
+              storage: 'local'
+            };
+          }
+        });
+      
+      // 等待所有视频信息获取完成
+      videos = await Promise.all(videoPromises);
+    }
     
     res.json({
       success: true,
-      videos: videos
+      videos: videos,
+      storage: blobService.isBlobStorageAvailable() ? 'blob' : 'local'
     });
   } catch (error) {
     console.error('获取视频列表错误:', error);
@@ -296,21 +626,36 @@ router.get('/list', async (req, res) => {
 });
 
 // 删除视频
-router.delete('/delete/:filename', (req, res) => {
+router.delete('/delete/:filename', async (req, res) => {
   try {
     const filename = req.params.filename;
-    const filePath = path.join(config.uploadDir, filename);
     
-    // 检查文件是否存在
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: '文件不存在'
-      });
+    // 如果启用了 Blob 存储，从 Blob Store 删除
+    if (blobService.isBlobStorageAvailable()) {
+      try {
+        // 先尝试从视频列表中获取实际的 Blob URL
+        const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
+        const targetBlob = uploadBlobs.find(blob => blob.pathname.endsWith(filename));
+        
+        if (targetBlob) {
+          // 使用从列表中获取的 URL
+          await blobService.deleteFromBlob(targetBlob.url);
+          console.log('已从 Blob Store 删除文件:', filename);
+        } else {
+          console.log('在 Blob Store 中未找到文件:', filename);
+        }
+      } catch (blobError) {
+        console.error('从 Blob Store 删除文件失败:', blobError);
+        // 继续尝试删除本地文件
+      }
     }
     
-    // 删除文件
-    fs.unlinkSync(filePath);
+    // 删除本地文件（如果存在）
+    const filePath = path.join(config.uploadDir, filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log('已删除本地文件:', filename);
+    }
     
     res.json({
       success: true,
@@ -321,6 +666,101 @@ router.delete('/delete/:filename', (req, res) => {
     res.status(500).json({
       success: false,
       message: '删除视频失败: ' + error.message
+    });
+  }
+});
+
+// 代理 Blob Store 视频流（解决跨域问题）
+router.get('/proxy/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    
+    // 如果启用了 Blob 存储，从 Blob Store 获取文件
+    if (blobService.isBlobStorageAvailable()) {
+      try {
+        const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
+        const targetBlob = uploadBlobs.find(blob => blob.pathname.endsWith(filename));
+        
+        if (targetBlob) {
+          // 代理请求到 Blob Store
+          const response = await fetch(targetBlob.url);
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch from Blob Store');
+          }
+          
+          // 设置响应头
+          res.setHeader('Content-Type', response.headers.get('content-type') || 'video/mp4');
+          res.setHeader('Content-Length', response.headers.get('content-length'));
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Cache-Control', 'public, max-age=31536000');
+          
+          // 流式传输数据
+          const readable = response.body;
+          readable.pipe(res);
+          return;
+        }
+      } catch (blobError) {
+        console.error('Blob Store 代理错误:', blobError);
+        // 回退到本地文件
+      }
+    }
+    
+    // 回退到本地文件
+    const filePath = path.join(config.uploadDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: '文件不存在'
+      });
+    }
+    
+    // 发送本地文件
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('代理视频错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '代理视频失败: ' + error.message
+    });
+  }
+});
+
+// 测试 Blob Store 连接状态
+router.get('/blob-status', async (req, res) => {
+  try {
+    const status = {
+      enabled: blobService.isBlobStorageAvailable(),
+      token: !!config.blob.token,
+      tokenPrefix: config.blob.token ? config.blob.token.substring(0, 20) + '...' : null,
+      uploadPrefix: config.blob.uploadPrefix,
+      processedPrefix: config.blob.processedPrefix
+    };
+    
+    if (status.enabled) {
+      try {
+        // 尝试列出文件来测试连接
+        const files = await blobService.listBlobFiles(config.blob.uploadPrefix, { limit: 1 });
+        status.connection = 'ok';
+        status.fileCount = files.length;
+      } catch (error) {
+        status.connection = 'error';
+        status.error = error.message;
+      }
+    } else {
+      status.connection = 'disabled';
+    }
+    
+    res.json({
+      success: true,
+      status: status
+    });
+  } catch (error) {
+    console.error('检查 Blob Store 状态错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '检查状态失败: ' + error.message
     });
   }
 });
