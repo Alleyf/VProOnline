@@ -273,16 +273,28 @@
                 </div>
                 
                 <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+                    <!-- Token验证提示 -->  
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mx-8 mt-8 mb-0 rounded-r-lg">
+                        <div class="flex items-start">
+                            <i class="fa fa-shield-alt text-yellow-400 mt-1 mr-3"></i>
+                            <div class="flex-1">
+                                <h4 class="text-sm font-medium text-yellow-800">上传验证已启用</h4>
+                                <p class="text-sm text-yellow-700 mt-1">
+                                    为了保护服务器资源，上传文件需要验证权限。系统将自动获取上传Token。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                     <!-- 上传区域 -->
-                    <div id="upload-area" class="p-8 border-b">
-                        <div id="drop-area" class="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group">
+                    <div id="upload-area" class="p-8 border-b hidden">
+                        <div id="drop-area" class="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group hidden">
                             <div class="flex flex-col items-center">
                                 <div class="w-16 h-16 rounded-full bg-primary/10 group-hover:bg-primary/20 flex items-center justify-center mb-4 transition-colors">
                                     <i class="fa fa-cloud-upload text-primary text-2xl"></i>
                                 </div>
                                 <h3 class="text-lg font-medium mb-2 group-hover:text-primary transition-colors">拖放视频文件到此处</h3>
                                 <p class="text-gray-500 mb-4">或点击任意位置选择文件上传</p>
-                                <button id="select-file-btn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+                                <button id="select-file-btn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors hidden">
                                     选择视频文件
                                 </button>
                                 <p class="text-gray-400 text-sm mt-4 group-hover:text-gray-500 transition-colors">支持 MP4, AVI, MOV 等多种格式，最大支持 2GB</p>
@@ -442,6 +454,19 @@
                                     <i class="fa fa-cog mr-2"></i> 开始处理视频
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 视频列表区域 -->
+                    <div id="video-list-section" class="p-8 border-t hidden">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-lg font-medium">我的视频</h3>
+                            <button id="refresh-video-list" class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                                <i class="fa fa-refresh mr-1"></i> 刷新列表
+                            </button>
+                        </div>
+                        <div id="video-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            <div class="text-center py-10 text-gray-500">加载中...</div>
                         </div>
                     </div>
                     

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员控制台 - VProOnline</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- 头部 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">
+                    <i class="fa fa-shield-alt text-blue-600 mr-2"></i>
+                    VProOnline 管理员控制台
+                </h1>
+                <p class="text-gray-600">管理上传权限和系统配置</p>
+            </div>
+
+            <!-- 上传Token管理 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                    <i class="fa fa-key text-green-600 mr-2"></i>
+                    上传权限管理
+                </h2>
+                
+                <div class="space-y-4">
+                    <!-- 认证密钥输入 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            管理员认证密钥
+                        </label>
+                        <input type="password" id="auth-key" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                               placeholder="请输入管理员认证密钥" value="csdc">
+                        <p class="text-xs text-gray-500 mt-1">当前配置: csdc</p>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="flex space-x-4">
+                        <button id="generate-token-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                            <i class="fa fa-plus mr-2"></i>生成上传Token
+                        </button>
+                        <button id="verify-token-btn" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                            <i class="fa fa-check mr-2"></i>验证Token
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Token列表 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fa fa-list text-purple-600 mr-2"></i>
+                    活跃的上传Token
+                </h3>
+                <div id="token-list" class="space-y-3">
+                    <p class="text-gray-500 text-center py-4">暂无活跃的Token</p>
+                </div>
+            </div>
+
+            <!-- 系统状态 -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fa fa-info-circle text-orange-600 mr-2"></i>
+                    系统状态
+                </h3>
+                <div id="system-status" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-800">上传验证</h4>
+                        <p id="auth-status" class="text-sm text-gray-600">检查中...</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-800">Blob存储</h4>
+                        <p id="blob-status" class="text-sm text-gray-600">检查中...</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-800">服务器状态</h4>
+                        <p id="server-status" class="text-sm text-green-600">正常运行</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div id="notification" class="fixed top-4 right-4 transform transition-all duration-300 translate-y-0 opacity-0 pointer-events-none z-50"></div>
+
+    <script>
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.className = 'fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-0 opacity-100 z-50';
+            
+            switch(type) {
+                case 'success':
+                    notification.classList.add('bg-green-500', 'text-white');
+                    break;
+                case 'error':
+                    notification.classList.add('bg-red-500', 'text-white');
+                    break;
+                case 'warning':
+                    notification.classList.add('bg-yellow-500', 'text-white');
+                    break;
+                default:
+                    notification.classList.add('bg-blue-500', 'text-white');
+            }
+            
+            notification.textContent = message;
+            
+            setTimeout(() => {
+                notification.classList.add('translate-y-0', 'opacity-0', 'pointer-events-none');
+                notification.classList.remove('translate-y-0', 'opacity-100');
+            }, 3000);
+        }
+
+        // 生成上传Token
+        document.getElementById('generate-token-btn').addEventListener('click', async () => {
+            const authKey = document.getElementById('auth-key').value;
+            
+            if (!authKey) {
+                showNotification('请输入管理员认证密钥', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/video/auth/upload-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ authKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('上传Token生成成功', 'success');
+                    addTokenToList(data);
+                } else {
+                    showNotification(data.message || 'Token生成失败', 'error');
+                }
+            } catch (error) {
+                showNotification('网络错误: ' + error.message, 'error');
+            }
+        });
+
+        // 验证Token
+        document.getElementById('verify-token-btn').addEventListener('click', async () => {
+            const token = prompt('请输入要验证的Token:');
+            if (!token) return;
+            
+            try {
+                const response = await fetch('/api/video/auth/verify-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.valid) {
+                    showNotification(`Token有效，剩余时间: ${data.remainingTime}`, 'success');
+                } else {
+                    showNotification(data.message || 'Token无效', 'warning');
+                }
+            } catch (error) {
+                showNotification('验证失败: ' + error.message, 'error');
+            }
+        });
+
+        // 添加Token到列表
+        function addTokenToList(tokenData) {
+            const tokenList = document.getElementById('token-list');
+            
+            // 清除"暂无Token"提示
+            if (tokenList.children[0] && tokenList.children[0].textContent.includes('暂无活跃')) {
+                tokenList.innerHTML = '';
+            }
+            
+            const tokenDiv = document.createElement('div');
+            tokenDiv.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
+            tokenDiv.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="font-mono text-sm text-gray-800 bg-white px-2 py-1 rounded border break-all">
+                            ${tokenData.token}
+                        </div>
+                        <div class="mt-2 text-xs text-gray-600">
+                            <span class="mr-4">有效期: ${tokenData.validFor}</span>
+                            <span>生成时间: ${new Date().toLocaleString()}</span>
+                        </div>
+                    </div>
+                    <button onclick="copyToken('${tokenData.token}')" class="ml-3 px-3 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors text-sm">
+                        <i class="fa fa-copy mr-1"></i>复制
+                    </button>
+                </div>
+            `;
+            
+            tokenList.appendChild(tokenDiv);
+        }
+
+        // 复制Token
+        function copyToken(token) {
+            navigator.clipboard.writeText(token).then(() => {
+                showNotification('Token已复制到剪贴板', 'success');
+            }).catch(() => {
+                showNotification('复制失败，请手动复制', 'error');
+            });
+        }
+
+        // 检查系统状态
+        async function checkSystemStatus() {
+            // 检查上传验证状态
+            document.getElementById('auth-status').textContent = '已启用';
+            
+            // 检查Blob存储状态
+            try {
+                const response = await fetch('/api/video/blob-status');
+                const data = await response.json();
+                
+                if (data.success && data.status.enabled) {
+                    document.getElementById('blob-status').textContent = '已连接';
+                    document.getElementById('blob-status').className = 'text-sm text-green-600';
+                } else {
+                    document.getElementById('blob-status').textContent = '未启用';
+                    document.getElementById('blob-status').className = 'text-sm text-gray-600';
+                }
+            } catch (error) {
+                document.getElementById('blob-status').textContent = '检查失败';
+                document.getElementById('blob-status').className = 'text-sm text-red-600';
+            }
+        }
+
+        // 页面加载时检查系统状态
+        document.addEventListener('DOMContentLoaded', () => {
+            checkSystemStatus();
+        });
+    </script>
+</body>
+</html>

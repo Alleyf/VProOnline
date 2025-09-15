@@ -2,6 +2,10 @@
 
 console.log('main.js 文件加载完成');
 
+// 添加全局变量来存储token状态
+let uploadToken = null;
+let isTokenValid = false;
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM内容加载完成，开始初始化应用');
     // 初始化应用
@@ -11,6 +15,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // 初始化应用
 function initApp() {
     console.log('开始初始化应用...');
+    
+    // 首先检查token状态
+    checkTokenStatus();
     
     // 初始化上传功能
     try {
@@ -59,42 +66,15 @@ function initApp() {
     console.log('应用初始化完成');
 }
 
-// 初始化首页按钮
-function initHomePageButtons() {
-    // 立即开始按钮
-    const getStartedBtn = document.getElementById('get-started-btn');
-    if (getStartedBtn) {
-        getStartedBtn.addEventListener('click', function() {
-            // 滚动到上传区域
-            const videoProcessor = document.getElementById('video-processor');
-            if (videoProcessor) {
-                const navbarHeight = document.querySelector('#navbar').offsetHeight;
-                const targetPosition = videoProcessor.offsetTop - navbarHeight - 20;
-                
-                window.scrollTo({
-                    top: targetPosition,
-                    behavior: 'smooth'
-                });
-            }
-        });
-    }
-    
-    // 观看演示按钮 - 跳转到演示页面
-    const demoBtns = document.querySelectorAll('button:has(.fa-play-circle)');
-    demoBtns.forEach(demoBtn => {
-        // 排除主logo，只处理演示按钮
-        if (demoBtn.textContent.includes('观看演示') || demoBtn.textContent.includes('观看教程')) {
-            demoBtn.addEventListener('click', function() {
-                // 跳转到演示页面
-                window.location.href = '/demo.html';
-            });
-        }
-    });
-}
-
 // 初始化上传功能
 function initUpload() {
     console.log('初始化上传功能...');
+    
+    // 在token验证通过之前不初始化上传功能
+    if (!isTokenValid) {
+        console.log('Token未验证，暂不初始化上传功能');
+        return;
+    }
     
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('file-input');
@@ -210,8 +190,156 @@ function initUpload() {
     }
 }
 
+// 修改checkTokenStatus函数，在token验证成功后初始化上传功能
+// 检查token状态
+function checkTokenStatus() {
+    // 隐藏上传区域和相关元素
+    hideUploadElements();
+    
+    // 尝试获取token
+    getUploadToken()
+        .then(token => {
+            uploadToken = token;
+            isTokenValid = true;
+            console.log('Token获取成功，显示上传区域');
+            showUploadElements();
+            // Token验证成功后初始化上传功能
+            initUpload();
+        })
+        .catch(error => {
+            console.error('Token获取失败:', error);
+            // 仍然隐藏上传区域
+            hideUploadElements();
+            showTokenError();
+        });
+}
+
+// 显示上传区域和相关元素
+function showUploadElements() {
+    const uploadArea = document.getElementById('upload-area');
+    const selectFileBtn = document.getElementById('select-file-btn');
+    const dropArea = document.getElementById('drop-area');
+    const videoListSection = document.getElementById('video-list-section');
+    
+    if (uploadArea) uploadArea.classList.remove('hidden');
+    if (selectFileBtn) selectFileBtn.classList.remove('hidden');
+    if (dropArea) dropArea.classList.remove('hidden');
+    if (videoListSection) videoListSection.classList.remove('hidden');
+}
+
+// 隐藏上传区域和相关元素
+function hideUploadElements() {
+    const uploadArea = document.getElementById('upload-area');
+    const selectFileBtn = document.getElementById('select-file-btn');
+    const dropArea = document.getElementById('drop-area');
+    const videoListSection = document.getElementById('video-list-section');
+    
+    if (uploadArea) uploadArea.classList.add('hidden');
+    if (selectFileBtn) selectFileBtn.classList.add('hidden');
+    if (dropArea) dropArea.classList.add('hidden');
+    if (videoListSection) videoListSection.classList.add('hidden');
+}
+
+// 显示token错误信息
+function showTokenError() {
+    const uploadArea = document.getElementById('upload-area');
+    if (uploadArea) {
+        uploadArea.innerHTML = `
+            <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fa fa-exclamation-triangle text-red-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-red-700">
+                            <strong>上传权限验证失败</strong><br>
+                            无法获取上传权限，请确保您有权限上传文件。
+                            <button id="retry-token-btn" class="ml-2 underline text-red-800 hover:text-red-900">
+                                重试
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 添加重试按钮事件监听
+        const retryBtn = document.getElementById('retry-token-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', function() {
+                checkTokenStatus();
+            });
+        }
+    }
+}
+
+// 获取上传验证token
+async function getUploadToken() {
+    try {
+        // 使用与环境变量中配置的秘钥一致的值
+        const authKey = ''; // 与 .env 文件中的 UPLOAD_AUTH_TOKEN 一致
+        
+        const response = await fetch('/api/video/auth/upload-token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ authKey })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || '获取上传token失败');
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            console.log('上传token获取成功:', data.token);
+            return data.token;
+        } else {
+            throw new Error(data.message || '获取上传token失败');
+        }
+    } catch (error) {
+        console.error('获取上传token错误:', error);
+        throw error;
+    }
+}
+
+// 初始化首页按钮
+function initHomePageButtons() {
+    // 立即开始按钮
+    const getStartedBtn = document.getElementById('get-started-btn');
+    if (getStartedBtn) {
+        getStartedBtn.addEventListener('click', function() {
+            // 滚动到上传区域
+            const videoProcessor = document.getElementById('video-processor');
+            if (videoProcessor) {
+                const navbarHeight = document.querySelector('#navbar').offsetHeight;
+                const targetPosition = videoProcessor.offsetTop - navbarHeight - 20;
+                
+                window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                });
+            }
+        });
+    }
+    
+    // 观看演示按钮 - 跳转到演示页面
+    const demoBtns = document.querySelectorAll('button:has(.fa-play-circle)');
+    demoBtns.forEach(demoBtn => {
+        // 排除主logo，只处理演示按钮
+        if (demoBtn.textContent.includes('观看演示') || demoBtn.textContent.includes('观看教程')) {
+            demoBtn.addEventListener('click', function() {
+                // 跳转到演示页面
+                window.location.href = '/demo.html';
+            });
+        }
+    });
+}
+
 // 处理文件上传
-function handleFileUpload(file) {
+async function handleFileUpload(file) {
     if (!file) {
         showNotification('请选择要上传的视频文件', 'error');
         return;
@@ -231,146 +359,190 @@ function handleFileUpload(file) {
         uploadFilename.textContent = file.name;
     }
     
-    // 显示进度容器并初始化进度
-    console.log('显示上传进度容器并初始化为0%');
-    showUploadProgress(true);
-    updateUploadProgress(0);
-    
-    console.log('开始上传文件:', file.name, '大小:', formatFileSize(file.size));
-    
-    // 检查 smartUploadFile 函数是否可用
-    if (typeof smartUploadFile !== 'function') {
-        console.error('smartUploadFile 函数不存在，请检查 blob-direct-upload.js 是否正确加载');
-        showNotification('上传功能初始化失败，请刷新页面重试', 'error');
-        return;
-    }
-    
-    // 取消之前的上传（如果有）
-    if (currentUploadXhr) {
-        currentUploadXhr.abort();
-    }
-    
-    // 使用智能上传函数（自动选择最佳上传方式）
-    currentUploadXhr = smartUploadFile(
-        file,
-        // 进度回调（支持消息和阶段）
-        function(percentage, message, phase) {
-            updateUploadProgress(percentage, message, phase);
-            console.log('上传进度:', Math.round(percentage) + '%', '阶段:', phase);
-        },
-        // 成功回调
-        function(data) {
-            console.log('上传成功:', data);
-            showUploadProgress(false);
-            currentUploadXhr = null; // 清空引用
-            
-            if (data.success) {
-                showNotification('视频上传成功', 'success');
-                loadVideoList(); // 重新加载视频列表
+    try {
+        // 第一步：获取上传验证token
+        console.log('获取上传验证token...');
+        showUploadProgress(true);
+        updateUploadProgress(0, '获取上传权限...');
+        
+        const uploadToken = await getUploadToken();
+        if (!uploadToken) {
+            throw new Error('无法获取上传权限，请稍后再试');
+        }
+        
+        console.log('上传token获取成功，开始上传文件:', file.name, '大小:', formatFileSize(file.size));
+        updateUploadProgress(5, '权限验证成功，开始上传...');
+        
+        // 检查 smartUploadFile 函数是否可用
+        if (typeof smartUploadFile !== 'function') {
+            console.error('smartUploadFile 函数不存在，请检查 blob-direct-upload.js 是否正确加载');
+            throw new Error('上传功能初始化失败，请刷新页面重试');
+        }
+        
+        // 取消之前的上传（如果有）
+        if (currentUploadXhr) {
+            currentUploadXhr.abort();
+        }
+        
+        // 使用智能上传函数（自动选择最佳上传方式）
+        currentUploadXhr = smartUploadFile(
+            file,
+            uploadToken, // 传递上传token
+            // 进度回调（支持消息和阶段）
+            function(percentage, message, phase) {
+                updateUploadProgress(percentage, message, phase);
+                console.log('上传进度:', Math.round(percentage) + '%', '阶段:', phase);
+            },
+            // 成功回调
+            function(data) {
+                console.log('上传成功:', data);
+                showUploadProgress(false);
+                currentUploadXhr = null; // 清空引用
                 
-                // 显示处理选项
-                const uploadArea = document.getElementById('upload-area');
-                const processingOptions = document.getElementById('processing-options');
-                
-                if (uploadArea && processingOptions) {
-                    uploadArea.classList.add('hidden');
-                    processingOptions.classList.remove('hidden');
+                if (data.success) {
+                    showNotification('视频上传成功', 'success');
+                    loadVideoList(); // 重新加载视频列表
                     
-                    // 设置视频预览
-                    const videoPreview = document.getElementById('video-preview');
-                    if (videoPreview && data.file && data.file.url) {
-                        console.log('Setting up video preview for:', {
-                            filename: data.file.filename,
-                            originalUrl: data.file.url,
-                            storage: data.file.storage
-                        });
+                    // 显示处理选项
+                    const uploadArea = document.getElementById('upload-area');
+                    const processingOptions = document.getElementById('processing-options');
+                    
+                    if (uploadArea && processingOptions) {
+                        uploadArea.classList.add('hidden');
+                        processingOptions.classList.remove('hidden');
                         
-                        // 添加错误处理
-                        videoPreview.onerror = function() {
-                            console.error('视频预览加载失败:', {
-                                src: videoPreview.src,
-                                storage: data.file.storage,
-                                error: 'Video element error event'
-                            });
-                            
-                            // 创建一个占位符或显示错误信息
-                            const errorDiv = document.createElement('div');
-                            errorDiv.className = 'flex items-center justify-center h-full bg-gray-100 text-gray-500';
-                            errorDiv.innerHTML = '<div class="text-center"><i class="fa fa-exclamation-triangle text-2xl mb-2"></i><p>视频预览暂不可用<br>文件已成功上传</p></div>';
-                            
-                            // 替换视频元素
-                            videoPreview.parentNode.replaceChild(errorDiv, videoPreview);
-                        };
-                        
-                        videoPreview.onabort = function() {
-                            console.warn('视频预览被中断:', {
-                                src: videoPreview.src,
+                        // 设置视频预览
+                        const videoPreview = document.getElementById('video-preview');
+                        if (videoPreview && data.file && data.file.url) {
+                            console.log('Setting up video preview for:', {
+                                filename: data.file.filename,
+                                originalUrl: data.file.url,
                                 storage: data.file.storage
                             });
-                            showNotification('视频预览加载被中断，但文件已成功上传', 'warning');
-                        };
-                        
-                        videoPreview.onloadstart = function() {
-                            console.log('视频开始加载:', videoPreview.src);
-                        };
-                        
-                        videoPreview.oncanplay = function() {
-                            console.log('视频可以播放:', videoPreview.src);
-                        };
-                        
-                        // 如果是 Blob 存储，使用代理端点
-                        let videoUrl = data.file.url;
-                        if (data.file.storage === 'blob') {
-                            // 使用本地代理端点来解决跨域问题
-                            videoUrl = `/api/video/proxy/${data.file.filename}`;
-                            console.log('使用代理 URL:', videoUrl);
+                            
+                            // 添加错误处理
+                            videoPreview.onerror = function() {
+                                console.error('视频预览加载失败:', {
+                                    src: videoPreview.src,
+                                    storage: data.file.storage,
+                                    error: 'Video element error event'
+                                });
+                                
+                                // 创建一个占位符或显示错误信息
+                                const errorDiv = document.createElement('div');
+                                errorDiv.className = 'flex items-center justify-center h-full bg-gray-100 text-gray-500';
+                                errorDiv.innerHTML = '<div class="text-center"><i class="fa fa-exclamation-triangle text-2xl mb-2"></i><p>视频预览暂不可用<br>文件已成功上传</p></div>';
+                                
+                                // 替换视频元素
+                                videoPreview.parentNode.replaceChild(errorDiv, videoPreview);
+                            };
+                            
+                            videoPreview.onabort = function() {
+                                console.warn('视频预览被中断:', {
+                                    src: videoPreview.src,
+                                    storage: data.file.storage,
+                                    readyState: videoPreview.readyState,
+                                    networkState: videoPreview.networkState
+                                });
+                                
+                                // 尝试重新加载
+                                setTimeout(() => {
+                                    console.log('尝试重新加载视频...');
+                                    videoPreview.load();
+                                }, 1000);
+                                
+                                showNotification('视频预览加载被中断，正在重试...', 'info');
+                            };
+                            
+                            videoPreview.oncanplay = function() {
+                                console.log('视频可以播放:', videoPreview.src);
+                            };
+                            
+                            // 如果是 Blob 存储，使用代理端点
+                            let videoUrl = data.file.url;
+                            if (data.file.storage === 'blob') {
+                                // 使用本地代理端点来解决跨域问题
+                                videoUrl = `/api/video/proxy/${data.file.filename}`;
+                                console.log('使用代理 URL:', videoUrl);
+                            }
+                            
+                            // 设置视频源并加载
+                            videoPreview.src = videoUrl;
+                            
+                            // 添加重试机制
+                            let retryCount = 0;
+                            const maxRetries = 3;
+                            
+                            const loadWithRetry = () => {
+                                videoPreview.load();
+                                
+                                const retryTimeout = setTimeout(() => {
+                                    if (videoPreview.readyState === 0 && retryCount < maxRetries) {
+                                        retryCount++;
+                                        console.log(`视频加载超时，第 ${retryCount} 次重试...`);
+                                        loadWithRetry();
+                                    } else if (retryCount >= maxRetries) {
+                                        console.error('视频加载多次失败，放弃重试');
+                                        showNotification('视频预览加载失败，但文件已成功上传', 'warning');
+                                    }
+                                }, 5000); // 5秒超时
+                                
+                                // 如果成功加载，清除超时定时器
+                                videoPreview.onloadstart = function() {
+                                    clearTimeout(retryTimeout);
+                                    console.log('视频开始加载:', videoPreview.src);
+                                };
+                            };
+                            
+                            loadWithRetry();
                         }
                         
-                        // 设置视频源并加载
-                        videoPreview.src = videoUrl;
-                        videoPreview.load();
+                        // 设置视频信息
+                        if (data.file && data.file.videoInfo) {
+                            document.getElementById('video-filename').textContent = data.file.name || file.name;
+                            document.getElementById('video-format').textContent = data.file.videoInfo.format || '-';
+                            document.getElementById('video-duration').textContent = formatDuration(data.file.videoInfo.duration) || '-';
+                            document.getElementById('video-resolution').textContent = 
+                                data.file.videoInfo.width && data.file.videoInfo.height ? 
+                                `${data.file.videoInfo.width} x ${data.file.videoInfo.height}` : '-';
+                            document.getElementById('video-size').textContent = formatFileSize(data.file.size || file.size);
+                        }
+                        
+                        // 存储当前视频文件名，用于后续处理
+                        const currentVideoFilename = document.getElementById('current-video-filename');
+                        if (!currentVideoFilename) {
+                            // 如果不存在，创建一个隐藏字段
+                            const hiddenField = document.createElement('input');
+                            hiddenField.type = 'hidden';
+                            hiddenField.id = 'current-video-filename';
+                            hiddenField.value = data.file.filename;
+                            document.body.appendChild(hiddenField);
+                        } else {
+                            // 如果已存在，更新值
+                            currentVideoFilename.value = data.file.filename;
+                        }
                     }
-                    
-                    // 设置视频信息
-                    if (data.file && data.file.videoInfo) {
-                        document.getElementById('video-filename').textContent = data.file.name || file.name;
-                        document.getElementById('video-format').textContent = data.file.videoInfo.format || '-';
-                        document.getElementById('video-duration').textContent = formatDuration(data.file.videoInfo.duration) || '-';
-                        document.getElementById('video-resolution').textContent = 
-                            data.file.videoInfo.width && data.file.videoInfo.height ? 
-                            `${data.file.videoInfo.width} x ${data.file.videoInfo.height}` : '-';
-                        document.getElementById('video-size').textContent = formatFileSize(data.file.size || file.size);
-                    }
-                    
-                    // 存储当前视频文件名，用于后续处理
-                    const currentVideoFilename = document.getElementById('current-video-filename');
-                    if (!currentVideoFilename) {
-                        // 如果不存在，创建一个隐藏字段
-                        const hiddenField = document.createElement('input');
-                        hiddenField.type = 'hidden';
-                        hiddenField.id = 'current-video-filename';
-                        hiddenField.value = data.file.filename;
-                        document.body.appendChild(hiddenField);
-                    } else {
-                        // 如果已存在，更新值
-                        currentVideoFilename.value = data.file.filename;
-                    }
+                } else {
+                    showNotification('上传失败: ' + data.message, 'error');
                 }
-            } else {
-                showNotification('上传失败: ' + data.message, 'error');
+            },
+            // 错误回调
+            function(error) {
+                console.error('上传错误:', error);
+                showUploadProgress(false);
+                currentUploadXhr = null; // 清空引用
+                showNotification('上传出错: ' + error.message, 'error');
             }
-        },
-        // 错误回调
-        function(error) {
-            console.error('上传错误:', error);
-            showUploadProgress(false);
-            currentUploadXhr = null; // 清空引用
-            showNotification('上传出错: ' + error.message, 'error');
-        }
-    );
-    
-    // 返回 xhr 对象，以便可以取消上传
-    return currentUploadXhr;
+        );
+        
+        // 返回 xhr 对象，以便可以取消上传
+        return currentUploadXhr;
+        
+    } catch (error) {
+        console.error('上传准备错误:', error);
+        showUploadProgress(false);
+        showNotification(error.message, 'error');
+    }
 }
 
 // 加载视频列表
@@ -649,6 +821,14 @@ function initUIInteractions() {
             cancelVideoProcessing();
         });
     }
+    
+    // 刷新视频列表按钮
+    const refreshVideoList = document.getElementById('refresh-video-list');
+    if (refreshVideoList) {
+        refreshVideoList.addEventListener('click', function() {
+            loadVideoList();
+        });
+    }
 }
 
 // 显示上传进度
@@ -921,25 +1101,50 @@ let currentUploadXhr = null;
 // 取消当前上传
 function cancelCurrentUpload() {
     if (currentUploadXhr) {
-        console.log('取消当前上传');
+        console.log('取消当前上传，currentUploadXhr 类型:', typeof currentUploadXhr);
+        console.log('currentUploadXhr 内容:', currentUploadXhr);
         
-        // 如果是新的对象结构（包含xhr和eventSource）
-        if (currentUploadXhr.abort && typeof currentUploadXhr.abort === 'function') {
-            currentUploadXhr.abort();
-        } else if (currentUploadXhr.xhr) {
-            // 兼容旧版本
-            currentUploadXhr.xhr.abort();
-            if (currentUploadXhr.eventSource) {
-                currentUploadXhr.eventSource.close();
+        try {
+            // 检查 currentUploadXhr 的类型并相应处理
+            if (typeof currentUploadXhr === 'object') {
+                // 检查是否有 abort 方法（优先使用）
+                if (currentUploadXhr.abort && typeof currentUploadXhr.abort === 'function') {
+                    console.log('调用 abort 方法');
+                    currentUploadXhr.abort();
+                } 
+                // 检查是否有 cancel 方法
+                else if (currentUploadXhr.cancel && typeof currentUploadXhr.cancel === 'function') {
+                    console.log('调用 cancel 方法');
+                    currentUploadXhr.cancel();
+                }
+                // 兼容旧版本结构（包含 xhr 属性）
+                else if (currentUploadXhr.xhr && typeof currentUploadXhr.xhr.abort === 'function') {
+                    console.log('调用 xhr.abort 方法');
+                    currentUploadXhr.xhr.abort();
+                    // 如果有 eventSource，也关闭它
+                    if (currentUploadXhr.eventSource && typeof currentUploadXhr.eventSource.close === 'function') {
+                        currentUploadXhr.eventSource.close();
+                    }
+                } else {
+                    console.warn('无法取消上传：currentUploadXhr 对象没有可识别的取消方法');
+                    console.log('currentUploadXhr 结构:', Object.keys(currentUploadXhr));
+                }
+            } else if (typeof currentUploadXhr === 'function') {
+                // 如果是函数，尝试调用它
+                console.log('调用 currentUploadXhr 函数');
+                currentUploadXhr();
+            } else {
+                console.warn('无法取消上传：currentUploadXhr 不是有效的对象或函数，类型为:', typeof currentUploadXhr);
             }
-        } else {
-            // 直接是xhr对象
-            currentUploadXhr.abort();
+        } catch (e) {
+            console.error('取消上传时出错:', e);
         }
         
         currentUploadXhr = null;
         showUploadProgress(false);
         showNotification('上传已取消', 'info');
+    } else {
+        console.log('没有正在进行的上传任务');
     }
 }
 

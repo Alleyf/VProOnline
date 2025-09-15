@@ -43,6 +43,193 @@ const upload = multer({
 // 存储上传会话信息
 const uploadSessions = new Map();
 
+// 存储有效的上传token
+const validUploadTokens = new Map();
+
+// 生成上传验证token
+function generateUploadToken() {
+  const token = uuidv4();
+  const expiryTime = Date.now() + config.upload.tokenExpiryTime;
+  
+  validUploadTokens.set(token, {
+    createdAt: Date.now(),
+    expiryTime: expiryTime,
+    used: false
+  });
+  
+  // 定期清理过期token
+  setTimeout(() => {
+    validUploadTokens.delete(token);
+  }, config.upload.tokenExpiryTime);
+  
+  return { token, expiryTime };
+}
+
+// 验证上传token的中间件
+function validateUploadToken(req, res, next) {
+  // 如果禁用了验证，直接通过
+  if (!config.upload.requireAuth) {
+    return next();
+  }
+  
+  const authToken = req.headers['x-upload-token'] || req.body.uploadToken || req.query.uploadToken;
+  
+  if (!authToken) {
+    return res.status(401).json({
+      success: false,
+      message: '缺少上传验证token',
+      code: 'MISSING_UPLOAD_TOKEN'
+    });
+  }
+  
+  const tokenInfo = validUploadTokens.get(authToken);
+  
+  if (!tokenInfo) {
+    return res.status(401).json({
+      success: false,
+      message: '无效的上传token',
+      code: 'INVALID_UPLOAD_TOKEN'
+    });
+  }
+  
+  if (Date.now() > tokenInfo.expiryTime) {
+    validUploadTokens.delete(authToken);
+    return res.status(401).json({
+      success: false,
+      message: '上传token已过期',
+      code: 'TOKEN_EXPIRED'
+    });
+  }
+  
+  if (tokenInfo.used) {
+    return res.status(401).json({
+      success: false,
+      message: '上传token已使用',
+      code: 'TOKEN_ALREADY_USED'
+    });
+  }
+  
+  // 标记token为已使用（一次性token）
+  tokenInfo.used = true;
+  
+  next();
+}
+
+// 获取上传验证token
+router.post('/auth/upload-token', (req, res) => {
+  try {
+    const { authKey } = req.body;
+    
+    // 验证管理员身份（使用环境变量中的秘钥）
+    if (authKey !== config.upload.authToken) {
+      return res.status(403).json({
+        success: false,
+        message: '身份验证失败，无权获取上传token',
+        code: 'INVALID_AUTH_KEY'
+      });
+    }
+    
+    // 限制频繁请求（简单的频率限制）
+    const clientIp = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const rateLimitKey = `rate_limit_${clientIp}`;
+    
+    // 存储每个IP的请求记录
+    if (!router.rateLimitStore) {
+      router.rateLimitStore = new Map();
+    }
+    
+    const requests = router.rateLimitStore.get(rateLimitKey) || [];
+    const recentRequests = requests.filter(time => now - time < 60000); // 1分钟内的请求
+    
+    if (recentRequests.length >= 10) { // 1分钟最多10次请求
+      return res.status(429).json({
+        success: false,
+        message: '请求过于频繁，请稍后再试',
+        code: 'RATE_LIMITED'
+      });
+    }
+    
+    recentRequests.push(now);
+    router.rateLimitStore.set(rateLimitKey, recentRequests);
+    
+    // 生成上传token
+    const tokenData = generateUploadToken();
+    
+    console.log(`为IP ${clientIp} 生成上传token: ${tokenData.token}`);
+    
+    res.json({
+      success: true,
+      token: tokenData.token,
+      expiryTime: tokenData.expiryTime,
+      validFor: Math.floor((tokenData.expiryTime - Date.now()) / 1000) + '秒',
+      message: '上传token获取成功'
+    });
+  } catch (error) {
+    console.error('获取上传token错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
+
+// 验证token有效性的API
+router.post('/auth/verify-token', (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少token参数'
+      });
+    }
+    
+    const tokenInfo = validUploadTokens.get(token);
+    
+    if (!tokenInfo) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: 'Token不存在'
+      });
+    }
+    
+    if (Date.now() > tokenInfo.expiryTime) {
+      validUploadTokens.delete(token);
+      return res.json({
+        success: true,
+        valid: false,
+        message: 'Token已过期'
+      });
+    }
+    
+    if (tokenInfo.used) {
+      return res.json({
+        success: true,
+        valid: false,
+        message: 'Token已使用'
+      });
+    }
+    
+    const remainingTime = Math.floor((tokenInfo.expiryTime - Date.now()) / 1000);
+    
+    res.json({
+      success: true,
+      valid: true,
+      remainingTime: remainingTime + '秒',
+      message: 'Token有效'
+    });
+  } catch (error) {
+    console.error('验证token错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '服务器错误: ' + error.message
+    });
+  }
+});
+
 // 上传进度事件流
 router.get('/upload-progress/:sessionId', (req, res) => {
   const sessionId = req.params.sessionId;
@@ -93,7 +280,7 @@ function sendProgressUpdate(sessionId, data) {
 }
 
 // 上传视频（分阶段处理）
-router.post('/upload', upload.single('video'), async (req, res) => {
+router.post('/upload', validateUploadToken, upload.single('video'), async (req, res) => {
   const sessionId = req.body.sessionId || uuidv4();
   
   try {
@@ -723,42 +910,93 @@ router.get('/list', async (req, res) => {
   }
 });
 
-// 删除视频
+// 删除视频（增强版，支持删除上传的视频和处理后的视频）
 router.delete('/delete/:filename', async (req, res) => {
   try {
     const filename = req.params.filename;
+    let deletedFromBlob = false;
+    let deletedFromLocal = false;
+    let deletedFromProcessed = false;
     
-    // 如果启用了 Blob 存储，从 Blob Store 删除
+    console.log(`开始删除视频文件: ${filename}`);
+    
+    // 1. 尝试从上传目录的 Blob Store 删除
     if (blobService.isBlobStorageAvailable()) {
       try {
-        // 先尝试从视频列表中获取实际的 Blob URL
+        // 先尝试从上传视频列表中获取实际的 Blob URL
         const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
         const targetBlob = uploadBlobs.find(blob => blob.pathname.endsWith(filename));
         
         if (targetBlob) {
           // 使用从列表中获取的 URL
           await blobService.deleteFromBlob(targetBlob.url);
-          console.log('已从 Blob Store 删除文件:', filename);
+          deletedFromBlob = true;
+          console.log('已从 Blob Store 删除上传文件:', filename);
         } else {
-          console.log('在 Blob Store 中未找到文件:', filename);
+          console.log('在 Blob Store 上传目录中未找到文件:', filename);
         }
       } catch (blobError) {
-        console.error('从 Blob Store 删除文件失败:', blobError);
-        // 继续尝试删除本地文件
+        console.error('从 Blob Store 删除上传文件失败:', blobError);
       }
     }
     
-    // 删除本地文件（如果存在）
-    const filePath = path.join(config.uploadDir, filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log('已删除本地文件:', filename);
+    // 2. 尝试从处理后视频的 Blob Store 删除
+    if (blobService.isBlobStorageAvailable() && !deletedFromBlob) {
+      try {
+        // 尝试从处理后视频列表中获取实际的 Blob URL
+        const processedBlobs = await blobService.listBlobFiles(config.blob.processedPrefix);
+        const targetBlob = processedBlobs.find(blob => blob.pathname.endsWith(filename));
+        
+        if (targetBlob) {
+          // 使用从列表中获取的 URL
+          await blobService.deleteFromBlob(targetBlob.url);
+          deletedFromBlob = true;
+          console.log('已从 Blob Store 删除处理后文件:', filename);
+        } else {
+          console.log('在 Blob Store 处理后目录中未找到文件:', filename);
+        }
+      } catch (blobError) {
+        console.error('从 Blob Store 删除处理后文件失败:', blobError);
+      }
     }
     
-    res.json({
-      success: true,
-      message: '视频已删除'
-    });
+    // 3. 删除本地上传文件（如果存在）
+    const uploadFilePath = path.join(config.uploadDir, filename);
+    if (fs.existsSync(uploadFilePath)) {
+      fs.unlinkSync(uploadFilePath);
+      deletedFromLocal = true;
+      console.log('已删除本地上传文件:', filename);
+    } else {
+      console.log('本地上传目录中未找到文件:', filename);
+    }
+    
+    // 4. 删除本地处理后文件（如果存在）
+    const processedFilePath = path.join(config.processedDir, filename);
+    if (fs.existsSync(processedFilePath)) {
+      fs.unlinkSync(processedFilePath);
+      deletedFromProcessed = true;
+      console.log('已删除本地处理后文件:', filename);
+    } else {
+      console.log('本地处理目录中未找到文件:', filename);
+    }
+    
+    // 5. 检查是否至少删除了一个文件
+    if (deletedFromBlob || deletedFromLocal || deletedFromProcessed) {
+      res.json({
+        success: true,
+        message: '视频已删除',
+        details: {
+          deletedFromBlob: deletedFromBlob,
+          deletedFromLocal: deletedFromLocal,
+          deletedFromProcessed: deletedFromProcessed
+        }
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: '未找到要删除的视频文件'
+      });
+    }
   } catch (error) {
     console.error('删除视频错误:', error);
     res.status(500).json({
@@ -772,6 +1010,7 @@ router.delete('/delete/:filename', async (req, res) => {
 router.get('/proxy/:filename', async (req, res) => {
   try {
     const filename = req.params.filename;
+    console.log(`代理视频请求: ${filename}`);
     
     // 如果启用了 Blob 存储，从 Blob Store 获取文件
     if (blobService.isBlobStorageAvailable()) {
@@ -780,23 +1019,67 @@ router.get('/proxy/:filename', async (req, res) => {
         const targetBlob = uploadBlobs.find(blob => blob.pathname.endsWith(filename));
         
         if (targetBlob) {
-          // 代理请求到 Blob Store
-          const response = await fetch(targetBlob.url);
+          console.log(`找到Blob文件: ${targetBlob.url}`);
           
-          if (!response.ok) {
-            throw new Error('Failed to fetch from Blob Store');
+          // 处理Range请求支持
+          const range = req.headers.range;
+          
+          if (range) {
+            // 支持分段请求
+            const response = await fetch(targetBlob.url, {
+              headers: {
+                'Range': range
+              }
+            });
+            
+            if (response.status === 206 || response.status === 200) {
+              // 转发响应头
+              res.status(response.status);
+              response.headers.forEach((value, key) => {
+                if (['content-length', 'content-range', 'content-type', 'accept-ranges'].includes(key.toLowerCase())) {
+                  res.setHeader(key, value);
+                }
+              });
+              
+              // 流式传输数据
+              const readable = response.body;
+              readable.on('error', (err) => {
+                console.error('视频流传输错误:', err);
+                if (!res.headersSent) {
+                  res.status(500).end();
+                }
+              });
+              
+              readable.pipe(res);
+              return;
+            }
+          } else {
+            // 普通请求
+            const response = await fetch(targetBlob.url);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            // 设置响应头
+            res.setHeader('Content-Type', response.headers.get('content-type') || 'video/mp4');
+            res.setHeader('Content-Length', response.headers.get('content-length'));
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('Cache-Control', 'public, max-age=31536000');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            
+            // 流式传输数据
+            const readable = response.body;
+            readable.on('error', (err) => {
+              console.error('视频流传输错误:', err);
+              if (!res.headersSent) {
+                res.status(500).end();
+              }
+            });
+            
+            readable.pipe(res);
+            return;
           }
-          
-          // 设置响应头
-          res.setHeader('Content-Type', response.headers.get('content-type') || 'video/mp4');
-          res.setHeader('Content-Length', response.headers.get('content-length'));
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.setHeader('Cache-Control', 'public, max-age=31536000');
-          
-          // 流式传输数据
-          const readable = response.body;
-          readable.pipe(res);
-          return;
         }
       } catch (blobError) {
         console.error('Blob Store 代理错误:', blobError);
@@ -808,20 +1091,34 @@ router.get('/proxy/:filename', async (req, res) => {
     const filePath = path.join(config.uploadDir, filename);
     
     if (!fs.existsSync(filePath)) {
+      console.error(`本地文件不存在: ${filePath}`);
       return res.status(404).json({
         success: false,
         message: '文件不存在'
       });
     }
     
-    // 发送本地文件
-    res.sendFile(filePath);
+    console.log(`发送本地文件: ${filePath}`);
+    // 发送本地文件，支持Range请求
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('发送本地文件失败:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: '文件发送失败: ' + err.message
+          });
+        }
+      }
+    });
   } catch (error) {
     console.error('代理视频错误:', error);
-    res.status(500).json({
-      success: false,
-      message: '代理视频失败: ' + error.message
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: '代理视频失败: ' + error.message
+      });
+    }
   }
 });
 
@@ -978,5 +1275,7 @@ router.get('/upload-limits', (req, res) => {
 });
 
 module.exports = router;
+
+
 
 

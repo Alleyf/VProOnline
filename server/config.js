@@ -27,6 +27,16 @@ module.exports = {
   // 清理过期文件的时间间隔 (24小时)
   cleanupInterval: 24 * 60 * 60 * 1000,
   
+  // 上传验证配置
+  upload: {
+    // 上传验证token，防止非法用户攻击
+    authToken: process.env.UPLOAD_AUTH_TOKEN || 'default_upload_token_change_me',
+    // Token有效期 (默认1小时)
+    tokenExpiryTime: parseInt(process.env.UPLOAD_TOKEN_EXPIRY) || 3600000, // 1小时
+    // 是否启用上传验证
+    requireAuth: process.env.UPLOAD_REQUIRE_AUTH !== 'false'
+  },
+  
   // Vercel Blob Store 配置
   blob: {
     // Blob Store 访问令牌

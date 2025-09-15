@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上传Token验证测试</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">上传Token验证测试</h1>
+        
+        <!-- 测试Token获取 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">1. Token获取测试</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">管理员密钥：</label>
+                    <input type="text" id="auth-key" value="csdc" class="w-full px-3 py-2 border rounded">
+                </div>
+                <button id="test-token" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    测试获取Token
+                </button>
+                <div id="token-result" class="p-3 bg-gray-100 rounded hidden">
+                    <pre id="token-output"></pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 测试无Token上传 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">2. 无Token上传测试（应该失败）</h2>
+            <div class="space-y-4">
+                <input type="file" id="file-no-token" accept="video/*" class="w-full">
+                <button id="test-upload-no-token" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                    测试无Token上传
+                </button>
+                <div id="no-token-result" class="p-3 bg-gray-100 rounded hidden">
+                    <pre id="no-token-output"></pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 测试有Token上传 -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">3. 有Token上传测试（应该成功）</h2>
+            <div class="space-y-4">
+                <input type="file" id="file-with-token" accept="video/*" class="w-full">
+                <button id="test-upload-with-token" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    测试有Token上传
+                </button>
+                <div id="with-token-result" class="p-3 bg-gray-100 rounded hidden">
+                    <pre id="with-token-output"></pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 测试验证状态 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">4. 验证配置状态</h2>
+            <button id="check-config" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+                检查验证配置
+            </button>
+            <div id="config-result" class="p-3 bg-gray-100 rounded hidden mt-4">
+                <pre id="config-output"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        
+        // 显示结果
+        function showResult(resultId, outputId, data, isError = false) {
+            const resultDiv = document.getElementById(resultId);
+            const outputDiv = document.getElementById(outputId);
+            
+            resultDiv.classList.remove('hidden');
+            resultDiv.className = `p-3 rounded ${isError ? 'bg-red-100' : 'bg-green-100'}`;
+            outputDiv.textContent = JSON.stringify(data, null, 2);
+        }
+        
+        // 1. 测试Token获取
+        document.getElementById('test-token').addEventListener('click', async () => {
+            const authKey = document.getElementById('auth-key').value;
+            
+            try {
+                const response = await fetch('/api/video/auth/upload-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ authKey })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentToken = data.token;
+                    showResult('token-result', 'token-output', data);
+                } else {
+                    showResult('token-result', 'token-output', data, true);
+                }
+            } catch (error) {
+                showResult('token-result', 'token-output', { error: error.message }, true);
+            }
+        });
+        
+        // 2. 测试无Token上传
+        document.getElementById('test-upload-no-token').addEventListener('click', async () => {
+            const file = document.getElementById('file-no-token').files[0];
+            
+            if (!file) {
+                showResult('no-token-result', 'no-token-output', { error: '请选择文件' }, true);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('video', file);
+            
+            try {
+                const response = await fetch('/api/video/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                showResult('no-token-result', 'no-token-output', data, !data.success);
+            } catch (error) {
+                showResult('no-token-result', 'no-token-output', { error: error.message }, true);
+            }
+        });
+        
+        // 3. 测试有Token上传
+        document.getElementById('test-upload-with-token').addEventListener('click', async () => {
+            const file = document.getElementById('file-with-token').files[0];
+            
+            if (!file) {
+                showResult('with-token-result', 'with-token-output', { error: '请选择文件' }, true);
+                return;
+            }
+            
+            if (!currentToken) {
+                showResult('with-token-result', 'with-token-output', { error: '请先获取Token' }, true);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('video', file);
+            formData.append('uploadToken', currentToken);
+            
+            try {
+                const response = await fetch('/api/video/upload', {
+                    method: 'POST',
+                    headers: {
+                        'X-Upload-Token': currentToken
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                showResult('with-token-result', 'with-token-output', data, !data.success);
+            } catch (error) {
+                showResult('with-token-result', 'with-token-output', { error: error.message }, true);
+            }
+        });
+        
+        // 4. 检查验证配置
+        document.getElementById('check-config').addEventListener('click', async () => {
+            try {
+                // 检查服务器配置
+                const response = await fetch('/api/video/upload-limits');
+                const data = await response.json();
+                
+                const configInfo = {
+                    uploadLimits: data,
+                    currentToken: currentToken ? 'Token已获取' : '未获取Token',
+                    tokenLength: currentToken ? currentToken.length : 0
+                };
+                
+                showResult('config-result', 'config-output', configInfo);
+            } catch (error) {
+                showResult('config-result', 'config-output', { error: error.message }, true);
+            }
+        });
+    </script>
+</body>
+</html>
