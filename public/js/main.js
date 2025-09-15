@@ -276,8 +276,13 @@ function showTokenError() {
 // 获取上传验证token
 async function getUploadToken() {
     try {
-        // 使用与环境变量中配置的秘钥一致的值
-        const authKey = ''; // 与 .env 文件中的 UPLOAD_AUTH_TOKEN 一致
+        // 创建一个模态框让用户输入authKey
+        const authKey = prompt('请输入上传验证密钥:', '');
+        
+        // 如果用户取消输入或输入为空，则抛出错误
+        if (!authKey) {
+            throw new Error('需要提供验证密钥才能上传文件');
+        }
         
         const response = await fetch('/api/video/auth/upload-token', {
             method: 'POST',
@@ -381,10 +386,19 @@ async function handleFileUpload(file) {
         
         // 取消之前的上传（如果有）
         if (currentUploadXhr) {
-            currentUploadXhr.abort();
+            console.log('取消之前的上传');
+            // 确保正确调用取消方法
+            if (typeof currentUploadXhr.abort === 'function') {
+                currentUploadXhr.abort();
+            } else if (typeof currentUploadXhr.cancel === 'function') {
+                currentUploadXhr.cancel();
+            } else if (currentUploadXhr.xhr && typeof currentUploadXhr.xhr.abort === 'function') {
+                currentUploadXhr.xhr.abort();
+            }
         }
         
         // 使用智能上传函数（自动选择最佳上传方式）
+        console.log('调用 smartUploadFile');
         currentUploadXhr = smartUploadFile(
             file,
             uploadToken, // 传递上传token
@@ -535,6 +549,8 @@ async function handleFileUpload(file) {
             }
         );
         
+        console.log('currentUploadXhr 已设置:', currentUploadXhr);
+        
         // 返回 xhr 对象，以便可以取消上传
         return currentUploadXhr;
         
@@ -578,19 +594,23 @@ function renderVideoList(videos, container) {
     let html = '';
     
     videos.forEach(video => {
+        // 确保必要的属性存在
+        const duration = video.duration || 0;
+        const size = video.size || 0;
+        const uploadDate = video.uploadDate || new Date();
         const thumbnailUrl = video.thumbnail || '/img/default-thumbnail.jpg';
         
         html += `
         <div class="video-item bg-white rounded-lg shadow-md overflow-hidden transition-all hover:shadow-lg" data-id="${video.id}">
             <div class="relative pb-[56.25%] bg-gray-100">
-                <img src="${thumbnailUrl}" alt="${video.name}" class="absolute top-0 left-0 w-full h-full object-cover">
-                <span class="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">${formatDuration(video.duration)}</span>
+                <img src="${thumbnailUrl}" alt="${video.name || '视频'}" class="absolute top-0 left-0 w-full h-full object-cover">
+                <span class="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">${formatDuration(duration)}</span>
             </div>
             <div class="p-4">
-                <h3 class="font-medium text-dark truncate">${video.name}</h3>
+                <h3 class="font-medium text-dark truncate">${video.name || video.filename || '未命名视频'}</h3>
                 <div class="flex justify-between items-center mt-2 text-sm text-gray-500">
-                    <span>${formatFileSize(video.size)}</span>
-                    <span>${formatDate(video.uploadDate)}</span>
+                    <span>${formatFileSize(size)}</span>
+                    <span>${formatDate(uploadDate)}</span>
                 </div>
                 <div class="flex justify-between mt-3">
                     <button class="process-btn bg-primary hover:bg-blue-600 text-white px-3 py-1 rounded text-sm" data-id="${video.id}" data-filename="${video.filename}">处理</button>

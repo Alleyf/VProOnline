@@ -824,17 +824,44 @@ router.get('/list', async (req, res) => {
         console.log('从 Blob Store 获取视频列表...');
         const uploadBlobs = await blobService.listBlobFiles(config.blob.uploadPrefix);
         
-        videos = uploadBlobs.map(blob => ({
-          id: path.basename(blob.pathname, path.extname(blob.pathname)),
-          filename: path.basename(blob.pathname),
-          name: path.basename(blob.pathname, path.extname(blob.pathname)),
-          url: blob.url,
-          blobUrl: blob.url,
-          size: blob.size,
-          uploadDate: blob.uploadedAt,
-          storage: 'blob'
-        }));
+        // 获取每个视频的详细信息
+        const videoPromises = uploadBlobs.map(async (blob) => {
+          const filename = path.basename(blob.pathname);
+          const id = path.basename(blob.pathname, path.extname(blob.pathname));
+          
+          // 尝试获取视频信息（如果可能的话）
+          let videoInfo = {};
+          try {
+            // 如果是本地文件，可以获取详细信息
+            // 但 Blob Store 中的文件需要特殊处理
+            // 这里我们只返回基本的 Blob 信息
+            videoInfo = {
+              duration: 0, // 无法直接从 Blob 信息获取时长
+              width: 0,
+              height: 0,
+              format: path.extname(filename).substring(1)
+            };
+          } catch (infoError) {
+            console.error(`获取视频信息失败: ${filename}`, infoError);
+          }
+          
+          return {
+            id: id,
+            filename: filename,
+            name: id,
+            url: blob.url,
+            blobUrl: blob.url,
+            size: blob.size,
+            uploadDate: blob.uploadedAt,
+            duration: videoInfo.duration,
+            width: videoInfo.width,
+            height: videoInfo.height,
+            format: videoInfo.format,
+            storage: 'blob'
+          };
+        });
         
+        videos = await Promise.all(videoPromises);
         console.log(`从 Blob Store 获取到 ${videos.length} 个视频`);
       } catch (blobError) {
         console.error('从 Blob Store 获取列表失败:', blobError);
@@ -1275,6 +1302,8 @@ router.get('/upload-limits', (req, res) => {
 });
 
 module.exports = router;
+
+
 
 
 

@@ -48,14 +48,18 @@ async function uploadFileToServer(file, uploadToken, onProgress, onSuccess, onEr
     const uploadObject = {
         xhr: xhr,
         cancel: function() {
+            console.log('调用 cancel 方法');
             xhr.abort();
             console.log('上传已取消');
         },
         abort: function() {
+            console.log('调用 abort 方法');
             xhr.abort();
             console.log('上传已中止');
         }
     };
+    
+    console.log('创建 uploadObject:', uploadObject);
     
     // 设置 SSE 连接来接收进度更新
     let eventSource = null;
@@ -164,6 +168,7 @@ async function uploadFileToServer(file, uploadToken, onProgress, onSuccess, onEr
     xhr.send(formData);
     
     // 返回可取消的对象
+    console.log('返回 uploadObject');
     return uploadObject;
 }
 
