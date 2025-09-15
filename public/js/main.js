@@ -167,7 +167,6 @@ function initUpload() {
         uploadForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const formData = new FormData();
             const file = fileInput.files[0];
             
             if (!file) {
@@ -175,31 +174,16 @@ function initUpload() {
                 return;
             }
             
-            formData.append('video', file);
-            
-            // 显示上传进度
-            showUploadProgress(true);
-            
-            // 发送上传请求
-            fetch('/api/video/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                showUploadProgress(false);
-                
-                if (data.success) {
-                    showNotification('视频上传成功', 'success');
-                    loadVideoList(); // 重新加载视频列表
-                } else {
-                    showNotification('上传失败: ' + data.message, 'error');
-                }
-            })
-            .catch(error => {
-                showUploadProgress(false);
-                showNotification('上传出错: ' + error.message, 'error');
-            });
+            // 直接调用 handleFileUpload 函数，使用统一的上传逻辑
+            handleFileUpload(file);
+        });
+    }
+    
+    // 取消上传按钮
+    const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+    if (cancelUploadBtn) {
+        cancelUploadBtn.addEventListener('click', function() {
+            cancelCurrentUpload();
         });
     }
 }
@@ -220,84 +204,144 @@ function handleFileUpload(file) {
     
     // 显示文件名和上传进度
     const uploadFilename = document.getElementById('upload-filename');
-    const uploadProgressContainer = document.getElementById('upload-progress-container');
     
     if (uploadFilename) {
         uploadFilename.textContent = file.name;
     }
     
-    if (uploadProgressContainer) {
-        uploadProgressContainer.classList.remove('hidden');
+    // 显示进度容器并初始化进度
+    console.log('显示上传进度容器并初始化为0%');
+    showUploadProgress(true);
+    updateUploadProgress(0);
+    
+    console.log('开始上传文件:', file.name, '大小:', formatFileSize(file.size));
+    
+    // 取消之前的上传（如果有）
+    if (currentUploadXhr) {
+        currentUploadXhr.abort();
     }
     
-    // 创建FormData对象
-    const formData = new FormData();
-    formData.append('video', file);
-    
-    // 显示上传进度
-    showUploadProgress(true);
-    
-    // 发送上传请求
-    fetch('/api/video/upload', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        showUploadProgress(false);
-        
-        if (data.success) {
-            showNotification('视频上传成功', 'success');
-            loadVideoList(); // 重新加载视频列表
+    // 使用带进度的上传函数
+    currentUploadXhr = uploadFileWithProgress(
+        file,
+        // 进度回调（支持消息和阶段）
+        function(percentage, message, phase) {
+            updateUploadProgress(percentage, message, phase);
+            console.log('上传进度:', Math.round(percentage) + '%', '阶段:', phase);
+        },
+        // 成功回调
+        function(data) {
+            console.log('上传成功:', data);
+            showUploadProgress(false);
+            currentUploadXhr = null; // 清空引用
             
-            // 显示处理选项
-            const uploadArea = document.getElementById('upload-area');
-            const processingOptions = document.getElementById('processing-options');
-            
-            if (uploadArea && processingOptions) {
-                uploadArea.classList.add('hidden');
-                processingOptions.classList.remove('hidden');
+            if (data.success) {
+                showNotification('视频上传成功', 'success');
+                loadVideoList(); // 重新加载视频列表
                 
-                // 设置视频预览
-                const videoPreview = document.getElementById('video-preview');
-                if (videoPreview && data.file && data.file.url) {
-                    videoPreview.src = data.file.url;
-                    videoPreview.load();
-                }
+                // 显示处理选项
+                const uploadArea = document.getElementById('upload-area');
+                const processingOptions = document.getElementById('processing-options');
                 
-                // 设置视频信息
-                if (data.file && data.file.videoInfo) {
-                    document.getElementById('video-filename').textContent = data.file.name || file.name;
-                    document.getElementById('video-format').textContent = data.file.videoInfo.format || '-';
-                    document.getElementById('video-duration').textContent = formatDuration(data.file.videoInfo.duration) || '-';
-                    document.getElementById('video-resolution').textContent = 
-                        data.file.videoInfo.width && data.file.videoInfo.height ? 
-                        `${data.file.videoInfo.width} x ${data.file.videoInfo.height}` : '-';
-                    document.getElementById('video-size').textContent = formatFileSize(data.file.size || file.size);
+                if (uploadArea && processingOptions) {
+                    uploadArea.classList.add('hidden');
+                    processingOptions.classList.remove('hidden');
+                    
+                    // 设置视频预览
+                    const videoPreview = document.getElementById('video-preview');
+                    if (videoPreview && data.file && data.file.url) {
+                        console.log('Setting up video preview for:', {
+                            filename: data.file.filename,
+                            originalUrl: data.file.url,
+                            storage: data.file.storage
+                        });
+                        
+                        // 添加错误处理
+                        videoPreview.onerror = function() {
+                            console.error('视频预览加载失败:', {
+                                src: videoPreview.src,
+                                storage: data.file.storage,
+                                error: 'Video element error event'
+                            });
+                            
+                            // 创建一个占位符或显示错误信息
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'flex items-center justify-center h-full bg-gray-100 text-gray-500';
+                            errorDiv.innerHTML = '<div class="text-center"><i class="fa fa-exclamation-triangle text-2xl mb-2"></i><p>视频预览暂不可用<br>文件已成功上传</p></div>';
+                            
+                            // 替换视频元素
+                            videoPreview.parentNode.replaceChild(errorDiv, videoPreview);
+                        };
+                        
+                        videoPreview.onabort = function() {
+                            console.warn('视频预览被中断:', {
+                                src: videoPreview.src,
+                                storage: data.file.storage
+                            });
+                            showNotification('视频预览加载被中断，但文件已成功上传', 'warning');
+                        };
+                        
+                        videoPreview.onloadstart = function() {
+                            console.log('视频开始加载:', videoPreview.src);
+                        };
+                        
+                        videoPreview.oncanplay = function() {
+                            console.log('视频可以播放:', videoPreview.src);
+                        };
+                        
+                        // 如果是 Blob 存储，使用代理端点
+                        let videoUrl = data.file.url;
+                        if (data.file.storage === 'blob') {
+                            // 使用本地代理端点来解决跨域问题
+                            videoUrl = `/api/video/proxy/${data.file.filename}`;
+                            console.log('使用代理 URL:', videoUrl);
+                        }
+                        
+                        // 设置视频源并加载
+                        videoPreview.src = videoUrl;
+                        videoPreview.load();
+                    }
+                    
+                    // 设置视频信息
+                    if (data.file && data.file.videoInfo) {
+                        document.getElementById('video-filename').textContent = data.file.name || file.name;
+                        document.getElementById('video-format').textContent = data.file.videoInfo.format || '-';
+                        document.getElementById('video-duration').textContent = formatDuration(data.file.videoInfo.duration) || '-';
+                        document.getElementById('video-resolution').textContent = 
+                            data.file.videoInfo.width && data.file.videoInfo.height ? 
+                            `${data.file.videoInfo.width} x ${data.file.videoInfo.height}` : '-';
+                        document.getElementById('video-size').textContent = formatFileSize(data.file.size || file.size);
+                    }
+                    
+                    // 存储当前视频文件名，用于后续处理
+                    const currentVideoFilename = document.getElementById('current-video-filename');
+                    if (!currentVideoFilename) {
+                        // 如果不存在，创建一个隐藏字段
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.id = 'current-video-filename';
+                        hiddenField.value = data.file.filename;
+                        document.body.appendChild(hiddenField);
+                    } else {
+                        // 如果已存在，更新值
+                        currentVideoFilename.value = data.file.filename;
+                    }
                 }
-                
-                // 存储当前视频文件名，用于后续处理
-                const currentVideoFilename = document.getElementById('current-video-filename');
-                if (!currentVideoFilename) {
-                    // 如果不存在，创建一个隐藏字段
-                    const hiddenField = document.createElement('input');
-                    hiddenField.type = 'hidden';
-                    hiddenField.id = 'current-video-filename';
-                    hiddenField.value = data.file.filename;
-                    document.body.appendChild(hiddenField);
-                } else {
-                    // 如果已存在，更新值
-                    currentVideoFilename.value = data.file.filename;
-                }
+            } else {
+                showNotification('上传失败: ' + data.message, 'error');
             }
-        } else {
-            showNotification('上传失败: ' + data.message, 'error');
+        },
+        // 错误回调
+        function(error) {
+            console.error('上传错误:', error);
+            showUploadProgress(false);
+            currentUploadXhr = null; // 清空引用
+            showNotification('上传出错: ' + error.message, 'error');
         }
-    })
-    .catch(error => {
-        showUploadProgress(false);
-        showNotification('上传出错: ' + error.message, 'error');
-    });
+    );
+    
+    // 返回 xhr 对象，以便可以取消上传
+    return currentUploadXhr;
 }
 
 // 加载视频列表
@@ -580,10 +624,229 @@ function initUIInteractions() {
 
 // 显示上传进度
 function showUploadProgress(show) {
-    const progressBar = document.getElementById('upload-progress');
-    if (progressBar) {
-        progressBar.style.display = show ? 'block' : 'none';
+    console.log('显示/隐藏上传进度容器:', show);
+    
+    const progressContainer = document.getElementById('upload-progress-container');
+    if (progressContainer) {
+        if (show) {
+            progressContainer.classList.remove('hidden');
+            console.log('上传进度容器已显示');
+        } else {
+            progressContainer.classList.add('hidden');
+            console.log('上传进度容器已隐藏');
+        }
+    } else {
+        console.error('未找到上传进度容器元素: upload-progress-container');
     }
+}
+
+// 更新上传进度（支持消息和阶段信息）
+function updateUploadProgress(percentage, message, phase) {
+    console.log('更新上传进度:', percentage + '%', '消息:', message, '阶段:', phase);
+    
+    const progressBar = document.getElementById('upload-progress-bar');
+    const progressText = document.getElementById('upload-percentage');
+    const statusMessage = document.getElementById('upload-status-message');
+    
+    if (progressBar) {
+        progressBar.style.width = percentage + '%';
+        console.log('进度条更新成功，宽度:', percentage + '%');
+    } else {
+        console.error('未找到进度条元素: upload-progress-bar');
+    }
+    
+    if (progressText) {
+        progressText.textContent = Math.round(percentage) + '%';
+        console.log('进度文本更新成功，内容:', Math.round(percentage) + '%');
+    } else {
+        console.error('未找到进度文本元素: upload-percentage');
+    }
+    
+    // 更新状态消息
+    if (message) {
+        if (statusMessage) {
+            statusMessage.textContent = message;
+            console.log('状态消息更新成功:', message);
+        } else {
+            // 如果没有专门的状态消息元素，尝试创建一个
+            const progressContainer = document.getElementById('upload-progress-container');
+            if (progressContainer && !statusMessage) {
+                const messageElement = document.createElement('div');
+                messageElement.id = 'upload-status-message';
+                messageElement.className = 'text-sm text-gray-600 mt-1 text-center';
+                messageElement.textContent = message;
+                progressContainer.appendChild(messageElement);
+                console.log('创建并更新状态消息:', message);
+            }
+        }
+    }
+}
+
+// 使用 XMLHttpRequest 实现带进度的文件上传（带 SSE 实时进度）
+function uploadFileWithProgress(file, onProgress, onSuccess, onError) {
+    console.log('开始创建上传请求...', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+    });
+    
+    // 生成会话ID
+    const sessionId = 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    console.log('生成上传会话ID:', sessionId);
+    
+    // 创建SSE连接监听服务器端进度
+    const eventSource = new EventSource(`/api/video/upload-progress/${sessionId}`);
+    
+    eventSource.onopen = function() {
+        console.log('SSE连接已建立');
+    };
+    
+    eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('收到SSE消息:', data);
+            
+            if (data.type === 'progress') {
+                if (onProgress) {
+                    onProgress(data.progress, data.message, data.phase);
+                }
+            } else if (data.type === 'complete') {
+                console.log('服务器端处理完成:', data.result);
+                eventSource.close();
+                if (onSuccess) {
+                    // 确保数据结构符合期望，包装成与直接返回相同的格式
+                    const responseData = {
+                        success: true,
+                        file: data.result
+                    };
+                    onSuccess(responseData);
+                }
+            } else if (data.type === 'error') {
+                console.error('服务器端处理错误:', data.message);
+                eventSource.close();
+                if (onError) {
+                    onError(new Error(data.message));
+                }
+            }
+        } catch (error) {
+            console.error('解析SSE消息失败:', error);
+        }
+    };
+    
+    eventSource.onerror = function(error) {
+        console.error('SSE连接错误:', error);
+        eventSource.close();
+    };
+    
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('video', file);
+    formData.append('sessionId', sessionId); // 添加会话ID
+    
+    // 上传进度监听（只反映浏览器到服务器的进度，约占总进度的30%）
+    xhr.upload.addEventListener('progress', function(e) {
+        console.log('浏览器上传进度事件:', {
+            lengthComputable: e.lengthComputable,
+            loaded: e.loaded,
+            total: e.total,
+            percentage: e.lengthComputable ? (e.loaded / e.total) * 100 : 0
+        });
+        
+        if (e.lengthComputable) {
+            // 浏览器到服务器的进度只占总进度的30%
+            const browserProgress = (e.loaded / e.total) * 30;
+            console.log('浏览器上传进度:', browserProgress.toFixed(2) + '%');
+            if (onProgress) {
+                onProgress(browserProgress, '正在上传到服务器...', 'browser_upload');
+            }
+        } else {
+            console.warn('无法计算浏览器上传进度，lengthComputable为false');
+        }
+    });
+    
+    // 上传开始
+    xhr.upload.addEventListener('loadstart', function() {
+        console.log('浏览器上传开始');
+        if (onProgress) {
+            onProgress(0, '开始上传...', 'start'); // 确保开始时显示0%
+        }
+    });
+    
+    // 完成监听
+    xhr.addEventListener('load', function() {
+        console.log('浏览器上传请求完成，状态码:', xhr.status);
+        
+        if (xhr.status === 200) {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                console.log('浏览器上传响应解析成功:', response);
+                
+                // 注意：这里不调用 onSuccess，因为真正的成功会通过SSE通知
+                // 浏览器上传完成只是第一阶段，还需要等待服务器处理
+                if (onProgress && !response.success) {
+                    // 如果上传失败，立即通知
+                    eventSource.close();
+                    if (onError) {
+                        onError(new Error(response.message || '上传失败'));
+                    }
+                }
+            } catch (error) {
+                console.error('响应解析失败:', error.message);
+                eventSource.close();
+                if (onError) {
+                    onError(new Error('响应解析失败: ' + error.message));
+                }
+            }
+        } else {
+            console.error('浏览器上传失败，状态码:', xhr.status, '响应:', xhr.responseText);
+            eventSource.close();
+            if (onError) {
+                onError(new Error('上传失败，状态码: ' + xhr.status));
+            }
+        }
+    });
+    
+    // 错误监听
+    xhr.addEventListener('error', function() {
+        console.error('浏览器上传发生网络错误');
+        eventSource.close();
+        if (onError) {
+            onError(new Error('网络错误'));
+        }
+    });
+    
+    // 超时监听
+    xhr.addEventListener('timeout', function() {
+        console.error('浏览器上传超时');
+        eventSource.close();
+        if (onError) {
+            onError(new Error('上传超时'));
+        }
+    });
+    
+    // 中断监听
+    xhr.addEventListener('abort', function() {
+        console.log('浏览器上传被中断');
+        eventSource.close();
+    });
+    
+    // 设置超时时间（10分钟）
+    xhr.timeout = 10 * 60 * 1000;
+    
+    // 发送请求
+    console.log('发送上传请求到:', '/api/video/upload');
+    xhr.open('POST', '/api/video/upload');
+    xhr.send(formData);
+    
+    // 返回一个包含xhr和eventSource的对象，以便可以取消上传
+    return {
+        xhr: xhr,
+        eventSource: eventSource,
+        abort: function() {
+            xhr.abort();
+            eventSource.close();
+        }
+    };
 }
 
 // 显示通知
@@ -620,6 +883,34 @@ function showNotification(message, type = 'info') {
                 notification.style.display = 'none';
             }, 300);
         }, 3000);
+    }
+}
+
+// 存储当前上传的 xhr 对象，用于取消上传
+let currentUploadXhr = null;
+
+// 取消当前上传
+function cancelCurrentUpload() {
+    if (currentUploadXhr) {
+        console.log('取消当前上传');
+        
+        // 如果是新的对象结构（包含xhr和eventSource）
+        if (currentUploadXhr.abort && typeof currentUploadXhr.abort === 'function') {
+            currentUploadXhr.abort();
+        } else if (currentUploadXhr.xhr) {
+            // 兼容旧版本
+            currentUploadXhr.xhr.abort();
+            if (currentUploadXhr.eventSource) {
+                currentUploadXhr.eventSource.close();
+            }
+        } else {
+            // 直接是xhr对象
+            currentUploadXhr.abort();
+        }
+        
+        currentUploadXhr = null;
+        showUploadProgress(false);
+        showNotification('上传已取消', 'info');
     }
 }
 

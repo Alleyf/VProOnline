@@ -1,4 +1,5 @@
 const path = require('path');
+require('dotenv').config();
 
 // 基础目录
 const baseDir = path.resolve(__dirname, '..');
@@ -24,5 +25,16 @@ module.exports = {
   supportedAudioFormats: ['mp3', 'wav', 'ogg', 'm4a'],
   
   // 清理过期文件的时间间隔 (24小时)
-  cleanupInterval: 24 * 60 * 60 * 1000
+  cleanupInterval: 24 * 60 * 60 * 1000,
+  
+  // Vercel Blob Store 配置
+  blob: {
+    // Blob Store 访问令牌
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+    // 是否启用 Blob 存储 (如果为 true，将上传到 Blob Store；为 false 则使用本地存储)
+    enabled: process.env.BLOB_STORAGE_ENABLED === 'true' || false,
+    // 存储桶前缀
+    uploadPrefix: 'videos/uploads/',
+    processedPrefix: 'videos/processed/'
+  }
 };

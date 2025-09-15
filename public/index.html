@@ -268,6 +268,11 @@
                             <div class="w-full bg-gray-200 rounded-full h-3">
                                 <div id="upload-progress-bar" class="bg-primary h-3 rounded-full progress-bar" style="width: 0%"></div>
                             </div>
+                            <div class="mt-2 text-center">
+                                <button id="cancel-upload-btn" class="px-4 py-1 text-sm text-gray-600 hover:text-red-600 transition-colors">
+                                    <i class="fa fa-times mr-1"></i> 取消上传
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
@@ -878,5 +883,9 @@
 
     <!-- JavaScript -->
     <script src="js/main.js"></script>
+    
+    <!-- 通知容器 -->
+    <div id="notification" class="hidden fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 z-50">
+    </div>
 </body>
 </html>
