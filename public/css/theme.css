@@ -1,0 +1,414 @@
+/* 主题系统CSS样式 */
+
+/* CSS变量定义 - 亮色主题 */
+:root {
+  /* 主要颜色 */
+  --color-primary: #165DFF;
+  --color-secondary: #36BFFA;
+  --color-success: #00B42A;
+  --color-warning: #FF7D00;
+  --color-danger: #F53F3F;
+  
+  /* 背景颜色 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-modal: rgba(0, 0, 0, 0.5);
+  
+  /* 文字颜色 */
+  --text-primary: #1D2129;
+  --text-secondary: #4E5969;
+  --text-tertiary: #86909C;
+  --text-inverse: #ffffff;
+  
+  /* 边框颜色 */
+  --border-primary: #E5E6EB;
+  --border-secondary: #C9CDD4;
+  --border-hover: var(--color-primary);
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  
+  /* 状态颜色 */
+  --state-hover: rgba(22, 93, 255, 0.05);
+  --state-active: rgba(22, 93, 255, 0.1);
+  --state-focus: rgba(22, 93, 255, 0.2);
+}
+
+/* 暗色主题 */
+:root.dark {
+  /* 主要颜色 - 在暗色主题中稍微调亮 */
+  --color-primary: #4080FF;
+  --color-secondary: #52C8FF;
+  --color-success: #23C343;
+  --color-warning: #FF8B2E;
+  --color-danger: #F76965;
+  
+  /* 背景颜色 */
+  --bg-primary: #0F1419;
+  --bg-secondary: #1A1F29;
+  --bg-tertiary: #232834;
+  --bg-card: #1A1F29;
+  --bg-modal: rgba(0, 0, 0, 0.8);
+  
+  /* 文字颜色 */
+  --text-primary: #E8E9EA;
+  --text-secondary: #C2C7D0;
+  --text-tertiary: #8B949E;
+  --text-inverse: #0F1419;
+  
+  /* 边框颜色 */
+  --border-primary: #2E3440;
+  --border-secondary: #3E4651;
+  --border-hover: var(--color-primary);
+  
+  /* 阴影 - 暗色主题中使用更深的阴影 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+  
+  /* 状态颜色 */
+  --state-hover: rgba(64, 128, 255, 0.1);
+  --state-active: rgba(64, 128, 255, 0.15);
+  --state-focus: rgba(64, 128, 255, 0.25);
+}
+
+/* 主题切换按钮样式 */
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background-color: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--state-hover);
+  border-color: var(--border-hover);
+  color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:active {
+  transform: translateY(0);
+  background-color: var(--state-active);
+}
+
+.theme-toggle-btn i {
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.theme-toggle-btn:hover i {
+  transform: scale(1.1);
+}
+
+/* 右下角固定工具栏 */
+.fixed-toolbar {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 工具栏按钮基础样式 */
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background-color: var(--color-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transform: translateY(20px) scale(0.8);
+}
+
+.toolbar-btn.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.toolbar-btn:hover {
+  background-color: var(--color-primary);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: var(--shadow-xl);
+}
+
+.toolbar-btn:active {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.toolbar-btn i {
+  font-size: 20px;
+  transition: transform 0.2s ease;
+}
+
+.toolbar-btn:hover i {
+  transform: scale(1.1);
+}
+
+/* 回到顶部按钮特定样式 */
+.scroll-to-top-btn {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+}
+
+.scroll-to-top-btn:hover {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  filter: brightness(1.1);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .fixed-toolbar {
+    bottom: 16px;
+    right: 16px;
+  }
+  
+  .toolbar-btn {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .toolbar-btn i {
+    font-size: 18px;
+  }
+}
+
+/* 主题过渡动画 */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 重写现有样式以使用CSS变量 */
+body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* 导航栏主题适配 */
+#navbar {
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* 卡片组件主题适配 */
+.bg-white {
+  background-color: var(--bg-card) !important;
+}
+
+.bg-gray-50 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.bg-gray-100 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* 文字颜色主题适配 */
+.text-gray-600 {
+  color: var(--text-secondary) !important;
+}
+
+.text-gray-500 {
+  color: var(--text-tertiary) !important;
+}
+
+.text-gray-700 {
+  color: var(--text-primary) !important;
+}
+
+.text-dark {
+  color: var(--text-primary) !important;
+}
+
+/* 边框主题适配 */
+.border-gray-200 {
+  border-color: var(--border-primary) !important;
+}
+
+.border-gray-300 {
+  border-color: var(--border-secondary) !important;
+}
+
+/* 阴影主题适配 */
+.shadow-sm {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.shadow-md {
+  box-shadow: var(--shadow-md) !important;
+}
+
+.shadow-lg {
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.shadow-xl {
+  box-shadow: var(--shadow-xl) !important;
+}
+
+/* 输入框主题适配 */
+input, textarea, select {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--state-focus);
+}
+
+/* 模态框主题适配 */
+.fixed.inset-0.bg-black\/50 {
+  background-color: var(--bg-modal) !important;
+}
+
+/* 按钮悬停效果主题适配 */
+.hover\:bg-primary\/5:hover {
+  background-color: var(--state-hover) !important;
+}
+
+.hover\:bg-primary\/90:hover {
+  background-color: var(--color-primary) !important;
+  filter: brightness(0.9);
+}
+
+/* 特殊动画效果 */
+@keyframes themeSwitch {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.theme-toggle-btn.switching i {
+  animation: themeSwitch 0.6s ease-in-out;
+}
+
+/* 工具栏进入动画 */
+@keyframes toolbarFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.5);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toolbar-btn.animate-in {
+  animation: toolbarFadeIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 暗色主题下的特殊效果 */
+.dark .toolbar-btn {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.dark .toolbar-btn:hover {
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+/* 无障碍访问支持 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  .toolbar-btn {
+    transition: background-color 0.1s ease, box-shadow 0.1s ease;
+  }
+}
+
+/* 高对比度支持 */
+@media (prefers-contrast: high) {
+  :root {
+    --border-primary: #000000;
+    --border-secondary: #000000;
+  }
+  
+  :root.dark {
+    --border-primary: #ffffff;
+    --border-secondary: #ffffff;
+  }
+}
+
+/* 额外的主题适配样式 */
+.dark body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.dark .container {
+  color: var(--text-primary);
+}
+
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: var(--text-primary);
+}
+
+.dark p {
+  color: var(--text-secondary);
+}
+
+/* 按钮主题适配 */
+.dark .bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
+.dark .text-primary {
+  color: var(--color-primary) !important;
+}
+
+.dark .border-primary {
+  border-color: var(--color-primary) !important;
+}
+
+/* 卡片和容器的暗色主题适配 */
+.dark .rounded-2xl, .dark .rounded-xl, .dark .rounded-lg {
+  background-color: var(--bg-card);
+  border-color: var(--border-primary);
+}
+
+/* 导航栏暗色主题 */
+.dark #navbar {
+  background-color: rgba(15, 20, 25, 0.9);
+  backdrop-filter: blur(10px);
+  border-bottom-color: var(--border-primary);
+}
+
+/* 模态框暗色主题 */
+.dark .fixed.inset-0 {
+  background-color: var(--bg-modal) !important;
+}

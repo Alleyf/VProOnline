@@ -35,6 +35,8 @@ module.exports = {
     enabled: process.env.BLOB_STORAGE_ENABLED === 'true' || false,
     // 存储桶前缀
     uploadPrefix: 'videos/uploads/',
-    processedPrefix: 'videos/processed/'
+    processedPrefix: 'videos/processed/',
+    // 是否在上传到Blob Store后清理本地文件默认为true
+    cleanupLocal: process.env.BLOB_CLEANUP_LOCAL !== 'false'
   }
 };

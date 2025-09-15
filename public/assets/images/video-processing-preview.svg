@@ -1,0 +1,133 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景渐变 -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8FAFB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E8F4FD;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FAFBFC;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+  
+  <rect width="800" height="500" fill="url(#bgGradient)"/>
+  
+  <!-- 顶部工具栏 -->
+  <rect width="800" height="60" fill="white" filter="url(#shadow)"/>
+  <circle cx="40" cy="30" r="6" fill="#FF5F56"/>
+  <circle cx="60" cy="30" r="6" fill="#FFBD2E"/>
+  <circle cx="80" cy="30" r="6" fill="#27CA3F"/>
+  
+  <rect x="120" y="22" width="24" height="16" rx="8" fill="#165DFF"/>
+  <text x="132" y="32" font-family="Arial" font-size="10" fill="white" text-anchor="middle">VP</text>
+  <text x="160" y="33" font-family="Arial" font-size="14" fill="#1D2129" font-weight="600">VProOnline</text>
+  
+  <!-- 用户菜单 -->
+  <rect x="680" y="20" width="100" height="20" rx="10" fill="#F2F3F5"/>
+  <circle cx="695" cy="30" r="8" fill="#165DFF"/>
+  <text x="710" y="33" font-family="Arial" font-size="11" fill="#1D2129">用户名</text>
+  
+  <!-- 主要内容区域 -->
+  <rect x="40" y="90" width="360" height="320" rx="16" fill="url(#cardGradient)" filter="url(#shadow)"/>
+  <rect x="420" y="90" width="340" height="320" rx="16" fill="url(#cardGradient)" filter="url(#shadow)"/>
+  
+  <!-- 左侧：视频预览区 -->
+  <text x="60" y="115" font-family="Arial" font-size="16" fill="#1D2129" font-weight="600">视频预览</text>
+  
+  <!-- 视频播放器 -->
+  <rect x="60" y="130" width="320" height="180" rx="12" fill="#000000"/>
+  <rect x="60" y="130" width="320" height="180" rx="12" fill="url(#videoGradient)" opacity="0.3"/>
+  
+  <!-- 播放按钮 -->
+  <circle cx="220" cy="220" r="25" fill="#165DFF" opacity="0.9"/>
+  <polygon points="210,210 210,230 235,220" fill="white"/>
+  
+  <!-- 视频控制栏 -->
+  <rect x="70" y="290" width="300" height="3" rx="1.5" fill="#E8E9EA"/>
+  <rect x="70" y="290" width="120" height="3" rx="1.5" fill="#165DFF"/>
+  <circle cx="190" cy="291.5" r="6" fill="#165DFF"/>
+  
+  <!-- 时间显示 -->
+  <text x="70" y="308" font-family="Arial" font-size="10" fill="#86909C">02:15</text>
+  <text x="340" y="308" font-family="Arial" font-size="10" fill="#86909C">05:42</text>
+  
+  <!-- 视频信息 -->
+  <rect x="60" y="330" width="320" height="60" rx="8" fill="#F7F8FA"/>
+  <text x="75" y="345" font-family="Arial" font-size="11" fill="#4E5969" font-weight="500">文件信息</text>
+  <text x="75" y="360" font-family="Arial" font-size="10" fill="#86909C">文件名: sample_video.mp4</text>
+  <text x="75" y="375" font-family="Arial" font-size="10" fill="#86909C">分辨率: 1920×1080 • 时长: 05:42 • 大小: 125.3 MB</text>
+  
+  <!-- 右侧：控制面板 -->
+  <text x="440" y="115" font-family="Arial" font-size="16" fill="#1D2129" font-weight="600">处理设置</text>
+  
+  <!-- 输出格式选择 -->
+  <text x="440" y="140" font-family="Arial" font-size="12" fill="#4E5969" font-weight="500">输出格式</text>
+  <rect x="440" y="150" width="300" height="40" rx="8" fill="#FFFFFF" stroke="#D9E0E8" stroke-width="1"/>
+  <text x="455" y="173" font-family="Arial" font-size="14" fill="#1D2129">MP4 (H.264)</text>
+  <polygon points="720,165 720,175 730,170" fill="#86909C"/>
+  
+  <!-- 质量设置 -->
+  <text x="440" y="215" font-family="Arial" font-size="12" fill="#4E5969" font-weight="500">视频质量</text>
+  <rect x="440" y="225" width="300" height="8" rx="4" fill="#F2F3F5"/>
+  <rect x="440" y="225" width="180" height="8" rx="4" fill="#165DFF"/>
+  <circle cx="620" cy="229" r="10" fill="#165DFF" stroke="white" stroke-width="2"/>
+  
+  <text x="440" y="250" font-family="Arial" font-size="10" fill="#86909C">高质量</text>
+  <text x="700" y="250" font-family="Arial" font-size="10" fill="#86909C">小文件</text>
+  
+  <!-- 高级设置 -->
+  <text x="440" y="275" font-family="Arial" font-size="12" fill="#4E5969" font-weight="500">高级设置</text>
+  
+  <!-- 分辨率设置 -->
+  <rect x="440" y="285" width="145" height="32" rx="6" fill="#F7F8FA" stroke="#E8E9EA" stroke-width="1"/>
+  <text x="455" y="303" font-family="Arial" font-size="11" fill="#4E5969">1280×720</text>
+  
+  <rect x="595" y="285" width="145" height="32" rx="6" fill="#F7F8FA" stroke="#E8E9EA" stroke-width="1"/>
+  <text x="610" y="303" font-family="Arial" font-size="11" fill="#4E5969">30 FPS</text>
+  
+  <!-- 处理按钮 -->
+  <rect x="440" y="350" width="300" height="44" rx="12" fill="#165DFF"/>
+  <text x="575" y="375" font-family="Arial" font-size="16" fill="white" font-weight="600" text-anchor="middle">开始处理视频</text>
+  <circle cx="555" cy="372" r="3" fill="white" opacity="0.8"/>
+  
+  <!-- 底部进度条 -->
+  <rect x="60" y="440" width="680" height="24" rx="12" fill="#F2F3F5"/>
+  <rect x="60" y="440" width="442" height="24" rx="12" fill="#165DFF"/>
+  
+  <!-- 进度文本 -->
+  <text x="400" y="455" font-family="Arial" font-size="12" fill="white" font-weight="600" text-anchor="middle">正在处理... 65%</text>
+  
+  <!-- 状态指示器 -->
+  <circle cx="100" cy="452" r="3" fill="white" opacity="0.9">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="110" cy="452" r="3" fill="white" opacity="0.7">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="120" cy="452" r="3" fill="white" opacity="0.5">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.6s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- 装饰性粒子效果 -->
+  <circle cx="150" cy="70" r="3" fill="#36BFFA" opacity="0.6">
+    <animate attributeName="cy" values="70;60;70" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="650" cy="70" r="4" fill="#165DFF" opacity="0.4">
+    <animate attributeName="cy" values="70;65;70" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="700" cy="440" r="2" fill="#00B42A" opacity="0.7">
+    <animate attributeName="cy" values="440;435;440" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- 网格背景效果 -->
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F2F3F5" stroke-width="0.5" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="500" fill="url(#grid)" opacity="0.3"/>
+</svg>

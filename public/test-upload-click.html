@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试上传区域点击功能</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8">测试上传区域点击功能</h1>
+        
+        <!-- 基础测试 -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">基础测试</h2>
+            
+            <!-- 简单的文件选择 -->
+            <div class="mb-4">
+                <h3 class="text-lg mb-2">1. 基础文件输入框</h3>
+                <input type="file" id="basic-file-input" accept="video/*" class="mb-2">
+                <button id="basic-trigger-btn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    触发文件选择
+                </button>
+                <div id="basic-result" class="mt-2 text-sm text-gray-600"></div>
+            </div>
+            
+            <!-- 隐藏文件输入框 + 按钮 -->
+            <div class="mb-4">
+                <h3 class="text-lg mb-2">2. 隐藏文件输入框 + 按钮触发</h3>
+                <input type="file" id="hidden-file-input" accept="video/*" class="hidden">
+                <button id="hidden-trigger-btn" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+                    选择文件
+                </button>
+                <div id="hidden-result" class="mt-2 text-sm text-gray-600"></div>
+            </div>
+            
+            <!-- 点击区域 -->
+            <div class="mb-4">
+                <h3 class="text-lg mb-2">3. 可点击区域</h3>
+                <div id="click-area" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <div class="mb-4">
+                        <i class="text-4xl text-gray-400 mb-2">📁</i>
+                        <p class="text-gray-600">点击此区域选择文件</p>
+                    </div>
+                    <button id="area-btn" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                        或点击此按钮
+                    </button>
+                </div>
+                <input type="file" id="area-file-input" accept="video/*" class="hidden">
+                <div id="area-result" class="mt-2 text-sm text-gray-600"></div>
+            </div>
+        </div>
+        
+        <!-- VProOnline 样式测试 -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">VProOnline 样式测试</h2>
+            
+            <div id="vpro-drop-area" class="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer group">
+                <div class="flex flex-col items-center">
+                    <div class="w-16 h-16 rounded-full bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center mb-4 transition-colors">
+                        <i class="text-blue-500 text-2xl">☁️</i>
+                    </div>
+                    <h3 class="text-lg font-medium mb-2 group-hover:text-blue-500 transition-colors">拖放视频文件到此处</h3>
+                    <p class="text-gray-500 mb-4">或点击任意位置选择文件上传</p>
+                    <button id="vpro-select-btn" class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                        选择视频文件
+                    </button>
+                    <p class="text-gray-400 text-sm mt-4 group-hover:text-gray-500 transition-colors">支持 MP4, AVI, MOV 等多种格式</p>
+                </div>
+                <input type="file" id="vpro-file-input" accept="video/*" class="hidden">
+            </div>
+            <div id="vpro-result" class="mt-4 text-sm text-gray-600"></div>
+        </div>
+        
+        <!-- 调试信息 -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">调试信息</h2>
+            <div id="debug-log" class="bg-gray-50 p-4 rounded h-64 overflow-y-auto font-mono text-sm"></div>
+        </div>
+    </div>
+
+    <script>
+        // 调试日志函数
+        function debugLog(message, type = 'info') {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                'info': 'text-blue-600',
+                'success': 'text-green-600',
+                'error': 'text-red-600',
+                'warn': 'text-yellow-600'
+            };
+            const colorClass = colors[type] || 'text-blue-600';
+            logDiv.innerHTML += `<div class="${colorClass}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // 文件选择处理函数
+        function handleFileSelection(file, resultElementId) {
+            const resultDiv = document.getElementById(resultElementId);
+            if (file) {
+                const fileInfo = `文件: ${file.name}, 大小: ${(file.size / 1024 / 1024).toFixed(2)}MB, 类型: ${file.type}`;
+                resultDiv.innerHTML = `<span class="text-green-600">✓ ${fileInfo}</span>`;
+                debugLog(`文件选择成功: ${fileInfo}`, 'success');
+            } else {
+                resultDiv.innerHTML = `<span class="text-red-600">✗ 未选择文件</span>`;
+                debugLog('未选择文件', 'warn');
+            }
+        }
+
+        // 初始化测试
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('页面加载完成，开始初始化测试', 'info');
+
+            // 1. 基础文件输入框测试
+            const basicFileInput = document.getElementById('basic-file-input');
+            const basicTriggerBtn = document.getElementById('basic-trigger-btn');
+            
+            basicFileInput.addEventListener('change', function() {
+                debugLog('基础文件输入框 change 事件触发', 'info');
+                handleFileSelection(this.files[0], 'basic-result');
+            });
+            
+            basicTriggerBtn.addEventListener('click', function() {
+                debugLog('基础触发按钮被点击', 'info');
+                basicFileInput.click();
+            });
+
+            // 2. 隐藏文件输入框测试
+            const hiddenFileInput = document.getElementById('hidden-file-input');
+            const hiddenTriggerBtn = document.getElementById('hidden-trigger-btn');
+            
+            hiddenFileInput.addEventListener('change', function() {
+                debugLog('隐藏文件输入框 change 事件触发', 'info');
+                handleFileSelection(this.files[0], 'hidden-result');
+            });
+            
+            hiddenTriggerBtn.addEventListener('click', function() {
+                debugLog('隐藏触发按钮被点击', 'info');
+                hiddenFileInput.click();
+            });
+
+            // 3. 点击区域测试
+            const areaFileInput = document.getElementById('area-file-input');
+            const clickArea = document.getElementById('click-area');
+            const areaBtn = document.getElementById('area-btn');
+            
+            areaFileInput.addEventListener('change', function() {
+                debugLog('区域文件输入框 change 事件触发', 'info');
+                handleFileSelection(this.files[0], 'area-result');
+            });
+            
+            clickArea.addEventListener('click', function(e) {
+                debugLog(`点击区域被点击，目标: ${e.target.tagName}`, 'info');
+                if (e.target === areaBtn || areaBtn.contains(e.target)) {
+                    debugLog('点击的是按钮，让按钮处理', 'info');
+                    return;
+                }
+                debugLog('点击的是区域，触发文件选择', 'info');
+                areaFileInput.click();
+            });
+            
+            areaBtn.addEventListener('click', function(e) {
+                debugLog('区域内按钮被点击', 'info');
+                e.stopPropagation();
+                areaFileInput.click();
+            });
+
+            // 4. VProOnline 样式测试
+            const vproFileInput = document.getElementById('vpro-file-input');
+            const vproDropArea = document.getElementById('vpro-drop-area');
+            const vproSelectBtn = document.getElementById('vpro-select-btn');
+            
+            vproFileInput.addEventListener('change', function() {
+                debugLog('VProOnline文件输入框 change 事件触发', 'info');
+                handleFileSelection(this.files[0], 'vpro-result');
+            });
+            
+            vproSelectBtn.addEventListener('click', function(e) {
+                debugLog('VProOnline选择按钮被点击', 'info');
+                e.stopPropagation();
+                vproFileInput.click();
+            });
+            
+            vproDropArea.addEventListener('click', function(e) {
+                debugLog(`VProOnline区域被点击，目标: ${e.target.tagName}`, 'info');
+                if (e.target === vproSelectBtn || vproSelectBtn.contains(e.target)) {
+                    debugLog('点击的是VProOnline按钮，让按钮处理', 'info');
+                    return;
+                }
+                debugLog('点击的是VProOnline区域，触发文件选择', 'info');
+                vproFileInput.click();
+            });
+
+            debugLog('所有测试初始化完成', 'success');
+        });
+    </script>
+</body>
+</html>

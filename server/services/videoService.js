@@ -196,9 +196,17 @@ const processVideo = (inputPath, options, progressCallback) => {
               result.blobUrl = blobResult.url;
               result.storage = 'blob';
               
-              // 上传成功后清理本地文件（可选）
-              if (config.blob.cleanupLocal !== false) {
-                await blobService.cleanupLocalFile(outputPath);
+              // 上传成功后清理本地文件
+              if (config.blob.cleanupLocal) {
+                console.log(`清理配置启用，开始清理处理后文件: ${outputPath}`);
+                try {
+                  await blobService.cleanupLocalFile(outputPath);
+                  console.log(`处理后文件已清理: ${outputPath}`);
+                } catch (cleanupError) {
+                  console.error(`清理处理后文件失败: ${outputPath}`, cleanupError);
+                }
+              } else {
+                console.log(`清理配置禁用，保留本地文件: ${outputPath}`);
               }
               
               console.log('视频已成功上传到 Blob Store:', blobResult.url);

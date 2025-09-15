@@ -1,5 +1,4 @@
-const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -158,12 +157,15 @@ router.post('/upload', upload.single('video'), async (req, res) => {
           req.file.filename,
           // 进度回调（从60%到90%）
           (blobProgress) => {
-            const adjustedProgress = 60 + (blobProgress * 0.3); // 60% + (blob进度 * 30%)
+            // 确保进度值有效
+            const validProgress = Math.max(0, Math.min(100, blobProgress || 0));
+            const adjustedProgress = 60 + (validProgress * 0.3); // 60% + (blob进度 * 30%)
+            console.log(`Blob上传进度: ${validProgress}%, 调整后总进度: ${adjustedProgress.toFixed(1)}%`);
             sendProgressUpdate(sessionId, {
               type: 'progress',
               phase: 'blob_uploading',
-              progress: adjustedProgress,
-              message: `云存储上传中... ${Math.round(blobProgress)}%`
+              progress: Math.round(adjustedProgress),
+              message: `云存储上传中... ${Math.round(validProgress)}%`
             });
           }
         );
@@ -180,9 +182,17 @@ router.post('/upload', upload.single('video'), async (req, res) => {
           message: '云存储上传完成，正在清理临时文件...'
         });
         
-        // 上传成功后清理本地文件（可选）
-        if (config.blob.cleanupLocal !== false) {
-          await blobService.cleanupLocalFile(req.file.path);
+        // 上传成功后清理本地文件
+        if (config.blob.cleanupLocal) {
+          console.log(`清理配置启用，开始清理本地文件: ${req.file.path}`);
+          try {
+            await blobService.cleanupLocalFile(req.file.path);
+            console.log(`原始上传文件已清理: ${req.file.path}`);
+          } catch (cleanupError) {
+            console.error(`清理原始上传文件失败: ${req.file.path}`, cleanupError);
+          }
+        } else {
+          console.log(`清理配置禁用，保留本地文件: ${req.file.path}`);
         }
         
         console.log('原始视频已成功上传到 Blob Store:', blobResult.url);
@@ -252,7 +262,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
 // 处理视频
 router.post('/process', async (req, res) => {
   try {
-    const { filename, options } = req.body;
+    const { filename, options, sessionId } = req.body;
     
     if (!filename) {
       return res.status(400).json({
@@ -261,12 +271,30 @@ router.post('/process', async (req, res) => {
       });
     }
     
+    // 生成会话ID（如果没有提供）
+    const processSessionId = sessionId || `process_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 发送处理开始状态
+    sendProgressUpdate(processSessionId, {
+      type: 'progress',
+      phase: 'process_start',
+      progress: 0,
+      message: '开始视频处理...'
+    });
+
     let inputPath = path.join(config.uploadDir, filename);
     let needsCleanup = false;
     
     // 检查本地文件是否存在
     if (!fs.existsSync(inputPath)) {
       console.log(`本地文件不存在: ${inputPath}，尝试从Blob Store下载...`);
+      
+      sendProgressUpdate(processSessionId, {
+        type: 'progress',
+        phase: 'downloading_source',
+        progress: 5,
+        message: '正在下载源文件...'
+      });
       
       // 如果本地文件不存在且启用了Blob存储，尝试从Blob Store下载
       if (blobService.isBlobStorageAvailable()) {
@@ -285,7 +313,18 @@ router.post('/process', async (req, res) => {
             inputPath = tempPath;
             needsCleanup = true;
             console.log(`文件已下载到: ${tempPath}`);
+            
+            sendProgressUpdate(processSessionId, {
+              type: 'progress',
+              phase: 'download_complete',
+              progress: 15,
+              message: '源文件下载完成'
+            });
           } else {
+            sendProgressUpdate(processSessionId, {
+              type: 'error',
+              message: '在Blob Store中找不到视频文件'
+            });
             return res.status(404).json({
               success: false,
               message: '在Blob Store中找不到视频文件'
@@ -293,31 +332,67 @@ router.post('/process', async (req, res) => {
           }
         } catch (blobError) {
           console.error('从Blob Store下载文件失败:', blobError);
+          sendProgressUpdate(processSessionId, {
+            type: 'error',
+            message: '从云存储下载文件失败: ' + blobError.message
+          });
           return res.status(500).json({
             success: false,
             message: '从云存储下载文件失败: ' + blobError.message
           });
         }
       } else {
+        sendProgressUpdate(processSessionId, {
+          type: 'error',
+          message: '视频文件不存在且未启用云存储'
+        });
         return res.status(404).json({
           success: false,
           message: '视频文件不存在且未启用云存储'
         });
       }
+    } else {
+      sendProgressUpdate(processSessionId, {
+        type: 'progress',
+        phase: 'source_ready',
+        progress: 15,
+        message: '源文件准备就绪'
+      });
     }
     
     console.log(`开始处理视频: ${inputPath}`);
     
+    sendProgressUpdate(processSessionId, {
+      type: 'progress',
+      phase: 'processing',
+      progress: 20,
+      message: '正在处理视频...'
+    });
+    
     // 处理视频
-    // 注意：实际生产环境中应使用队列和WebSocket来处理长时间运行的任务
     const result = await videoService.processVideo(
       path.basename(inputPath), // 只传递文件名
       options || {},
       (progress) => {
-        // 这里可以通过WebSocket发送进度更新
-        console.log(`处理进度: ${progress}%`);
+        // 将FFmpeg进度映射到20%-80%
+        const adjustedProgress = 20 + (progress * 0.6); // 20% + (处理进度 * 60%)
+        console.log(`FFmpeg处理进度: ${progress}%, 调整后总进度: ${adjustedProgress.toFixed(1)}%`);
+        
+        sendProgressUpdate(processSessionId, {
+          type: 'progress',
+          phase: 'processing',
+          progress: Math.round(adjustedProgress),
+          message: `视频处理中... ${Math.round(progress)}%`
+        });
       }
     );
+    
+    sendProgressUpdate(processSessionId, {
+      type: 'progress',
+      phase: 'process_complete',
+      progress: 90,
+      message: '视频处理完成，正在清理临时文件...'
+    });
     
     // 如果使用了临时文件，清理它
     if (needsCleanup && fs.existsSync(inputPath)) {
@@ -330,12 +405,35 @@ router.post('/process', async (req, res) => {
       }
     }
     
-    res.json({
-      success: true,
+    sendProgressUpdate(processSessionId, {
+      type: 'complete',
+      phase: 'complete',
+      progress: 100,
+      message: '视频处理完成！',
       result: result
     });
+    
+    res.json({
+      success: true,
+      result: result,
+      sessionId: processSessionId
+    });
+    
+    // 延迟清理会话信息
+    setTimeout(() => {
+      uploadSessions.delete(processSessionId);
+    }, 5000);
+    
   } catch (error) {
     console.error('视频处理错误:', error);
+    
+    if (req.body.sessionId) {
+      sendProgressUpdate(req.body.sessionId, {
+        type: 'error',
+        message: '视频处理失败: ' + error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: '视频处理失败: ' + error.message
@@ -735,7 +833,8 @@ router.get('/blob-status', async (req, res) => {
       token: !!config.blob.token,
       tokenPrefix: config.blob.token ? config.blob.token.substring(0, 20) + '...' : null,
       uploadPrefix: config.blob.uploadPrefix,
-      processedPrefix: config.blob.processedPrefix
+      processedPrefix: config.blob.processedPrefix,
+      cleanupLocal: config.blob.cleanupLocal
     };
     
     if (status.enabled) {
@@ -765,4 +864,119 @@ router.get('/blob-status', async (req, res) => {
   }
 });
 
+// 检查本地文件状态
+router.get('/local-files-status', async (req, res) => {
+  try {
+    const getFileInfo = (dirPath) => {
+      if (!fs.existsSync(dirPath)) {
+        return [];
+      }
+      const files = fs.readdirSync(dirPath);
+      return files.map(filename => {
+        const filePath = path.join(dirPath, filename);
+        const stats = fs.statSync(filePath);
+        const ageMs = Date.now() - stats.ctimeMs;
+        const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+        const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
+        return {
+          name: filename,
+          size: stats.size,
+          created: stats.ctime,
+          age: ageHours > 0 ? `${ageHours}小时${ageMinutes}分钟前` : `${ageMinutes}分钟前`
+        };
+      });
+    };
+
+    const uploadFiles = getFileInfo(config.uploadDir);
+    const processedFiles = getFileInfo(config.processedDir);
+
+    res.json({
+      success: true,
+      uploadDir: config.uploadDir,
+      processedDir: config.processedDir,
+      uploadFiles: uploadFiles,
+      processedFiles: processedFiles,
+      totalFiles: uploadFiles.length + processedFiles.length
+    });
+  } catch (error) {
+    console.error('检查本地文件错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '检查本地文件失败: ' + error.message
+    });
+  }
+});
+
+// 强制清理本地文件
+router.post('/force-cleanup', async (req, res) => {
+  try {
+    let cleanedFiles = 0;
+    let freedSpace = 0;
+    const details = [];
+
+    const cleanDirectory = (dirPath, description) => {
+      if (!fs.existsSync(dirPath)) {
+        details.push(`${description}: 目录不存在`);
+        return;
+      }
+      
+      const files = fs.readdirSync(dirPath);
+      details.push(`${description}: 找到 ${files.length} 个文件`);
+      
+      files.forEach(filename => {
+        const filePath = path.join(dirPath, filename);
+        try {
+          const stats = fs.statSync(filePath);
+          fs.unlinkSync(filePath);
+          cleanedFiles++;
+          freedSpace += stats.size;
+          details.push(`删除: ${filename} (${(stats.size/1024/1024).toFixed(2)}MB)`);
+        } catch (error) {
+          details.push(`删除失败: ${filename} - ${error.message}`);
+        }
+      });
+    };
+
+    // 清理上传目录
+    cleanDirectory(config.uploadDir, '上传目录');
+    
+    // 清理处理目录
+    cleanDirectory(config.processedDir, '处理目录');
+
+    res.json({
+      success: true,
+      cleanedFiles: cleanedFiles,
+      freedSpace: `${(freedSpace/1024/1024).toFixed(2)}MB`,
+      details: details.join('\n')
+    });
+  } catch (error) {
+    console.error('强制清理错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '清理失败: ' + error.message
+    });
+  }
+});
+
+// 获取上传限制信息
+router.get('/upload-limits', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      maxFileSize: config.maxFileSize,
+      serverlessLimit: 4.5 * 1024 * 1024, // 4.5MB Vercel 限制
+      useDirectUpload: process.env.NODE_ENV === 'production', // 生产环境使用直接上传
+      blobEnabled: blobService.isBlobStorageAvailable()
+    });
+  } catch (error) {
+    console.error('获取上传限制错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取上传限制失败: ' + error.message
+    });
+  }
+});
+
 module.exports = router;
+
+

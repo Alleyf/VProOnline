@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上传进度调试 - VProOnline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">上传进度调试工具</h1>
+        
+        <!-- 文件上传区域 -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">文件上传测试</h2>
+            
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-4">
+                <input type="file" id="fileInput" accept="video/*" class="hidden">
+                <button id="selectBtn" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">
+                    选择视频文件
+                </button>
+                <p class="text-gray-500 mt-2">支持所有视频格式</p>
+            </div>
+            
+            <!-- 进度显示 -->
+            <div id="progressSection" class="hidden">
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm text-gray-600 mb-1">
+                        <span id="progressText">准备上传...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-4">
+                        <div id="progressBar" class="progress-bar bg-blue-500 h-4 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="flex gap-4 text-sm mb-4">
+                    <span>阶段: <span id="currentPhase" class="font-semibold">-</span></span>
+                    <span>状态: <span id="currentStatus" class="font-semibold">-</span></span>
+                </div>
+                
+                <!-- 上传完成后的操作 -->
+                <div id="uploadComplete" class="hidden bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h3 class="text-green-800 font-semibold mb-3">上传完成！现在可以测试视频处理</h3>
+                    <div class="flex gap-4 flex-wrap">
+                        <button id="processBasic" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+                            基础转码 (MP4)
+                        </button>
+                        <button id="processCompress" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">
+                            压缩视频 (低质量)
+                        </button>
+                        <button id="processResize" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                            调整尺寸 (720p)
+                        </button>
+                        <button id="extractAudio" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">
+                            提取音频 (MP3)
+                        </button>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-600">
+                        <span>上传的文件: <span id="uploadedFilename" class="font-mono">-</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 详细日志 -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">实时日志</h2>
+            <div id="logContainer" class="log">等待上传开始...</div>
+            <button id="clearLog" class="mt-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                清除日志
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const selectBtn = document.getElementById('selectBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressPercent = document.getElementById('progressPercent');
+        const currentPhase = document.getElementById('currentPhase');
+        const currentStatus = document.getElementById('currentStatus');
+        const logContainer = document.getElementById('logContainer');
+        const clearLog = document.getElementById('clearLog');
+        const uploadComplete = document.getElementById('uploadComplete');
+        const uploadedFilename = document.getElementById('uploadedFilename');
+        const processBasic = document.getElementById('processBasic');
+        const processCompress = document.getElementById('processCompress');
+        const processResize = document.getElementById('processResize');
+        const extractAudio = document.getElementById('extractAudio');
+        
+        let currentUploadedFile = null;
+
+        // 日志功能
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${message}`;
+            if (type === 'error') logEntry.classList.add('text-red-600');
+            if (type === 'success') logEntry.classList.add('text-green-600');
+            if (type === 'warning') logEntry.classList.add('text-yellow-600');
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // 更新进度
+        function updateProgress(progress, message, phase = '') {
+            progress = Math.max(0, Math.min(100, progress));
+            progressBar.style.width = `${progress}%`;
+            progressPercent.textContent = `${Math.round(progress)}%`;
+            progressText.textContent = message;
+            if (phase) currentPhase.textContent = phase;
+            
+            log(`进度更新: ${Math.round(progress)}% - ${message}`, 'info');
+        }
+
+        // 文件选择
+        selectBtn.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            log(`选择文件: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`, 'info');
+            uploadFile(file);
+        });
+
+        // 清除日志
+        clearLog.addEventListener('click', () => {
+            logContainer.innerHTML = '日志已清除...';
+        });
+
+        // 上传文件
+        async function uploadFile(file) {
+            progressSection.classList.remove('hidden');
+            currentStatus.textContent = '上传中';
+            
+            const formData = new FormData();
+            formData.append('video', file);
+            
+            const sessionId = 'debug_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            formData.append('sessionId', sessionId);
+            
+            log(`开始上传，会话ID: ${sessionId}`, 'info');
+            
+            // 设置SSE连接监听进度
+            const eventSource = new EventSource(`/api/video/upload-progress/${sessionId}`);
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`SSE消息: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'progress') {
+                        updateProgress(data.progress, data.message, data.phase);
+                    } else if (data.type === 'complete') {
+                        updateProgress(100, '上传完成！', 'complete');
+                        currentStatus.textContent = '完成';
+                        log('上传成功完成！', 'success');
+                        
+                        // 显示处理按钮
+                        if (data.result && data.result.file) {
+                            currentUploadedFile = data.result.file.filename;
+                            uploadedFilename.textContent = currentUploadedFile;
+                            uploadComplete.classList.remove('hidden');
+                            log(`可以开始处理文件: ${currentUploadedFile}`, 'success');
+                        }
+                        
+                        eventSource.close();
+                    } else if (data.type === 'error') {
+                        log(`上传错误: ${data.message}`, 'error');
+                        currentStatus.textContent = '错误';
+                        eventSource.close();
+                    }
+                } catch (parseError) {
+                    log(`解析SSE数据失败: ${parseError.message}`, 'error');
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                log(`SSE连接错误: ${JSON.stringify(error)}`, 'error');
+                eventSource.close();
+            };
+            
+            // 创建XMLHttpRequest进行上传
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 30); // 前30%为客户端上传
+                    updateProgress(percentComplete, `客户端上传: ${percentComplete}%`, 'client_upload');
+                }
+            });
+            
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        log(`上传响应: ${JSON.stringify(result)}`, 'success');
+                    } catch (parseError) {
+                        log(`解析响应失败: ${parseError.message}`, 'error');
+                    }
+                } else {
+                    log(`上传失败，状态码: ${xhr.status}`, 'error');
+                    currentStatus.textContent = '失败';
+                }
+            });
+            
+            xhr.addEventListener('error', () => {
+                log('网络错误', 'error');
+                currentStatus.textContent = '网络错误';
+            });
+            
+            xhr.open('POST', '/api/video/upload');
+            xhr.send(formData);
+        }
+        
+        // 视频处理功能
+        async function processVideo(options, description) {
+            if (!currentUploadedFile) {
+                log('请先上传文件', 'error');
+                return;
+            }
+            
+            log(`开始${description}`, 'info');
+            uploadComplete.classList.add('hidden');
+            progressSection.classList.remove('hidden');
+            currentStatus.textContent = '处理中';
+            
+            const sessionId = 'process_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            
+            // 设置SSE连接监听处理进度
+            const eventSource = new EventSource(`/api/video/upload-progress/${sessionId}`);
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`处理SSE消息: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'progress') {
+                        updateProgress(data.progress, data.message, data.phase);
+                    } else if (data.type === 'complete') {
+                        updateProgress(100, '处理完成！', 'complete');
+                        currentStatus.textContent = '完成';
+                        log(`${description}成功完成！`, 'success');
+                        
+                        if (data.result) {
+                            log(`结果文件: ${data.result.filename}`, 'success');
+                            if (data.result.url) {
+                                log(`下载链接: ${data.result.url}`, 'success');
+                            }
+                        }
+                        
+                        eventSource.close();
+                        
+                        // 3秒后重新显示处理按钮
+                        setTimeout(() => {
+                            uploadComplete.classList.remove('hidden');
+                        }, 3000);
+                    } else if (data.type === 'error') {
+                        log(`处理错误: ${data.message}`, 'error');
+                        currentStatus.textContent = '错误';
+                        eventSource.close();
+                        uploadComplete.classList.remove('hidden');
+                    }
+                } catch (parseError) {
+                    log(`解析处理SSE数据失败: ${parseError.message}`, 'error');
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                log(`处理SSE连接错误: ${JSON.stringify(error)}`, 'error');
+                eventSource.close();
+                uploadComplete.classList.remove('hidden');
+            };
+            
+            // 发送处理请求
+            try {
+                const response = await fetch('/api/video/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: currentUploadedFile,
+                        options: options,
+                        sessionId: sessionId
+                    })
+                });
+                
+                const result = await response.json();
+                log(`处理请求响应: ${JSON.stringify(result)}`, result.success ? 'success' : 'error');
+                
+            } catch (fetchError) {
+                log(`发送处理请求失败: ${fetchError.message}`, 'error');
+                currentStatus.textContent = '错误';
+                eventSource.close();
+                uploadComplete.classList.remove('hidden');
+            }
+        }
+        
+        // 处理按钮事件
+        processBasic.addEventListener('click', () => {
+            processVideo({
+                format: 'mp4'
+            }, '基础MP4转码');
+        });
+        
+        processCompress.addEventListener('click', () => {
+            processVideo({
+                format: 'mp4',
+                compress: {
+                    crf: 28  // 高压缩比
+                }
+            }, '压缩视频');
+        });
+        
+        processResize.addEventListener('click', () => {
+            processVideo({
+                format: 'mp4',
+                resize: {
+                    width: 1280,
+                    height: 720,
+                    keepAspectRatio: true
+                }
+            }, '调整尺寸为720p');
+        });
+        
+        extractAudio.addEventListener('click', () => {
+            processVideo({
+                extractAudio: true,
+                audioFormat: 'mp3'
+            }, '提取MP3音频');
+        });
+    </script>
+</body>
+</html>

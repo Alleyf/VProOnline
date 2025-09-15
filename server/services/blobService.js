@@ -29,15 +29,21 @@ const uploadToBlob = async (localFilePath, blobPath, options = {}) => {
     // 读取文件内容
     const fileBuffer = fs.readFileSync(localFilePath);
     
+    // 检查文件大小，大文件使用multipart上传
+    const fileSize = fileBuffer.length;
+    const isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB以上的文件
+    
     // 设置默认选项
     const uploadOptions = {
       access: 'public',
       token: config.blob.token,
+      multipart: isLargeFile, // 大文件自动启用multipart
+      addRandomSuffix: false, // 保持原文件名
       ...options
     };
 
     // 上传到 Blob Store
-    console.log(`正在上传文件到 Blob Store: ${blobPath}`);
+    console.log(`正在上传文件到 Blob Store: ${blobPath}, 大小: ${(fileSize / 1024 / 1024).toFixed(2)}MB, multipart: ${isLargeFile}`);
     const result = await put(blobPath, fileBuffer, uploadOptions);
     
     console.log(`文件上传成功: ${result.url}`);
@@ -95,7 +101,7 @@ const listBlobFiles = async (prefix = '', options = {}) => {
 };
 
 /**
- * 上传原始视频到 Blob Store（带进度回调）
+ * 上传原始视频到 Blob Store（带真实进度回调）
  * @param {string} localFilePath - 本地文件路径
  * @param {string} filename - 文件名
  * @param {Function} progressCallback - 进度回调函数
@@ -103,47 +109,85 @@ const listBlobFiles = async (prefix = '', options = {}) => {
  */
 const uploadRawVideo = async (localFilePath, filename, progressCallback = null) => {
   const blobPath = `${config.blob.uploadPrefix}${filename}`;
+  let progressTimer = null; // 在函数顶部声明
   
-  // 模拟进度更新，因为Vercel Blob Store不支持真实进度回调
-  if (progressCallback) {
-    // 获取文件大小来估算进度
-    const stats = fs.statSync(localFilePath);
-    const fileSize = stats.size;
-    
-    // 根据文件大小估算上传时间并模拟进度
-    const estimatedTime = Math.max(2000, Math.min(10000, fileSize / 1024 / 1024 * 1000)); // 1MB/s的估算
-    const progressInterval = estimatedTime / 30; // 分30步更新进度
-    
-    console.log(`开始模拟Blob上传进度，文件大小: ${(fileSize / 1024 / 1024).toFixed(2)}MB，估算时间: ${estimatedTime}ms`);
-    
-    // 创建进度更新定时器
-    let currentProgress = 0;
-    const progressTimer = setInterval(() => {
-      currentProgress += 3; // 每次增加3%
-      if (currentProgress <= 85) { // 最多到85%，剩下的等实际完成
-        progressCallback(currentProgress);
-      }
-    }, progressInterval);
-    
-    try {
-      // 执行实际上传
-      const result = await uploadToBlob(localFilePath, blobPath);
-      
-      // 清除定时器并设置为100%
-      clearInterval(progressTimer);
-      if (progressCallback) {
-        progressCallback(100);
-      }
-      
-      return result;
-    } catch (error) {
-      // 清除定时器
-      clearInterval(progressTimer);
-      throw error;
+  try {
+    if (!config.blob.enabled || !config.blob.token) {
+      throw new Error('Blob 存储未启用或缺少访问令牌');
     }
-  } else {
-    // 如果没有进度回调，直接上传
-    return await uploadToBlob(localFilePath, blobPath);
+
+    // 检查本地文件是否存在
+    if (!fs.existsSync(localFilePath)) {
+      throw new Error(`本地文件不存在: ${localFilePath}`);
+    }
+
+    // 读取文件内容
+    const fileBuffer = fs.readFileSync(localFilePath);
+    const fileSize = fileBuffer.length;
+    const isLargeFile = fileSize > 10 * 1024 * 1024; // 10MB以上的文件
+    
+    console.log(`开始上传视频到 Blob Store: ${blobPath}, 大小: ${(fileSize / 1024 / 1024).toFixed(2)}MB, multipart: ${isLargeFile}`);
+    
+    // 设置上传选项，包括进度回调
+    let hasReceivedProgress = false;
+    const uploadOptions = {
+      access: 'public',
+      token: config.blob.token,
+      multipart: isLargeFile, // 大文件启用multipart上传
+      addRandomSuffix: false, // 保持原文件名
+      onUploadProgress: progressCallback ? (progressEvent) => {
+        // Vercel Blob SDK 的进度回调：{ loaded: number, total: number, percentage: number }
+        hasReceivedProgress = true;
+        const percentage = progressEvent.percentage || 0;
+        console.log(`Blob 上传进度: ${percentage}% (${progressEvent.loaded}/${progressEvent.total})`);
+        progressCallback(percentage);
+      } : undefined
+    };
+
+    // 添加一个备用的进度监控机制（防止onUploadProgress不工作）
+    if (progressCallback) {
+      let currentProgress = 0;
+      progressTimer = setInterval(() => {
+        if (!hasReceivedProgress && currentProgress < 85) {
+          currentProgress += 8; // 更快的进度增长
+          console.log(`备用进度监控: ${currentProgress}%`);
+          progressCallback(currentProgress);
+        }
+      }, 800); // 更频繁的更新
+      
+      // 5秒后停止备用监控（防止无限运行）
+      setTimeout(() => {
+        if (progressTimer && !hasReceivedProgress) {
+          console.log('停止备用进度监控，等待实际上传完成');
+          clearInterval(progressTimer);
+          progressTimer = null;
+        }
+      }, 5000);
+    }
+
+    // 上传到 Blob Store
+    const result = await put(blobPath, fileBuffer, uploadOptions);
+    
+    // 清理备用进度监控
+    if (progressTimer) {
+      clearInterval(progressTimer);
+    }
+    
+    // 确保最终进度为100%
+    if (progressCallback) {
+      progressCallback(100);
+    }
+    
+    console.log(`视频上传成功: ${result.url}`);
+    return result;
+    
+  } catch (error) {
+    // 清理备用进度监控
+    if (progressTimer) {
+      clearInterval(progressTimer);
+    }
+    console.error('上传视频到 Blob Store 失败:', error);
+    throw error;
   }
 };
 

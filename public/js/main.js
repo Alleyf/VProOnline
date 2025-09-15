@@ -1,23 +1,62 @@
 // VProOnline - 主JavaScript文件
 
+console.log('main.js 文件加载完成');
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM内容加载完成，开始初始化应用');
     // 初始化应用
     initApp();
 });
 
 // 初始化应用
 function initApp() {
+    console.log('开始初始化应用...');
+    
     // 初始化上传功能
-    initUpload();
+    try {
+        initUpload();
+        console.log('上传功能初始化成功');
+    } catch (error) {
+        console.error('上传功能初始化失败:', error);
+    }
     
     // 初始化视频列表
-    loadVideoList();
+    try {
+        loadVideoList();
+        console.log('视频列表初始化成功');
+    } catch (error) {
+        console.error('视频列表初始化失败:', error);
+    }
     
     // 初始化UI交互
-    initUIInteractions();
+    try {
+        initUIInteractions();
+        console.log('UI交互初始化成功');
+    } catch (error) {
+        console.error('UI交互初始化失败:', error);
+    }
     
     // 初始化首页按钮
-    initHomePageButtons();
+    try {
+        initHomePageButtons();
+        console.log('首页按钮初始化成功');
+    } catch (error) {
+        console.error('首页按钮初始化失败:', error);
+    }
+    
+    // 初始化所有页面交互功能
+    try {
+        if (typeof initializeAllInteractions === 'function') {
+            initializeAllInteractions();
+            console.log('页面交互功能初始化成功');
+        } else {
+            console.warn('initializeAllInteractions 函数不存在，跳过该初始化');
+        }
+    } catch (error) {
+        console.error('页面交互功能初始化失败:', error);
+    }
+    
+    console.log('应用初始化完成');
 }
 
 // 初始化首页按钮
@@ -27,103 +66,86 @@ function initHomePageButtons() {
     if (getStartedBtn) {
         getStartedBtn.addEventListener('click', function() {
             // 滚动到上传区域
-            const uploadSection = document.getElementById('upload-section');
-            if (uploadSection) {
-                uploadSection.scrollIntoView({ behavior: 'smooth' });
+            const videoProcessor = document.getElementById('video-processor');
+            if (videoProcessor) {
+                const navbarHeight = document.querySelector('#navbar').offsetHeight;
+                const targetPosition = videoProcessor.offsetTop - navbarHeight - 20;
+                
+                window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                });
             }
         });
     }
     
-    // 观看演示按钮
-    const demoBtn = document.querySelector('button:has(.fa-play-circle)');
-    if (demoBtn) {
-        demoBtn.addEventListener('click', function() {
-            // 打开演示视频模态框
-            const demoModal = document.getElementById('demo-modal');
-            if (demoModal) {
-                demoModal.classList.remove('hidden');
-            } else {
-                // 如果模态框不存在，创建一个
-                createDemoModal();
-            }
-        });
-    }
-}
-
-// 创建演示视频模态框
-function createDemoModal() {
-    // 创建模态框容器
-    const modal = document.createElement('div');
-    modal.id = 'demo-modal';
-    modal.className = 'fixed inset-0 flex items-center justify-center z-50 bg-black/50';
-    
-    // 创建模态框内容
-    const modalContent = document.createElement('div');
-    modalContent.className = 'bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 overflow-hidden';
-    
-    // 创建模态框头部
-    const modalHeader = document.createElement('div');
-    modalHeader.className = 'flex justify-between items-center p-4 border-b';
-    
-    const modalTitle = document.createElement('h3');
-    modalTitle.className = 'text-lg font-semibold';
-    modalTitle.textContent = '产品演示视频';
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'text-gray-500 hover:text-gray-700';
-    closeBtn.innerHTML = '<i class="fa fa-times"></i>';
-    closeBtn.addEventListener('click', function() {
-        modal.classList.add('hidden');
-    });
-    
-    modalHeader.appendChild(modalTitle);
-    modalHeader.appendChild(closeBtn);
-    
-    // 创建视频容器
-    const videoContainer = document.createElement('div');
-    videoContainer.className = 'p-4';
-    
-    const video = document.createElement('video');
-    video.className = 'w-full aspect-video';
-    video.controls = true;
-    video.src = 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4'; // 示例视频URL
-    video.poster = 'https://picsum.photos/id/96/800/500'; // 示例封面图
-    
-    videoContainer.appendChild(video);
-    
-    // 组装模态框
-    modalContent.appendChild(modalHeader);
-    modalContent.appendChild(videoContainer);
-    modal.appendChild(modalContent);
-    
-    // 添加点击外部关闭功能
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.classList.add('hidden');
+    // 观看演示按钮 - 跳转到演示页面
+    const demoBtns = document.querySelectorAll('button:has(.fa-play-circle)');
+    demoBtns.forEach(demoBtn => {
+        // 排除主logo，只处理演示按钮
+        if (demoBtn.textContent.includes('观看演示') || demoBtn.textContent.includes('观看教程')) {
+            demoBtn.addEventListener('click', function() {
+                // 跳转到演示页面
+                window.location.href = '/demo.html';
+            });
         }
     });
-    
-    // 添加到页面
-    document.body.appendChild(modal);
 }
 
 // 初始化上传功能
 function initUpload() {
+    console.log('初始化上传功能...');
+    
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('file-input');
     const selectFileBtn = document.getElementById('select-file-btn');
     const dropArea = document.getElementById('drop-area');
     
+    console.log('元素查找结果:', {
+        uploadForm: !!uploadForm,
+        fileInput: !!fileInput,
+        selectFileBtn: !!selectFileBtn,
+        dropArea: !!dropArea
+    });
+    
     // 点击选择文件按钮时触发文件输入元素点击
     if (selectFileBtn && fileInput) {
-        selectFileBtn.addEventListener('click', function() {
+        console.log('添加按钮点击事件监听器');
+        selectFileBtn.addEventListener('click', function(e) {
+            console.log('按钮被点击');
+            e.preventDefault();
+            e.stopPropagation();
             fileInput.click();
         });
+    } else {
+        console.error('按钮或文件输入元素不存在:', { selectFileBtn: !!selectFileBtn, fileInput: !!fileInput });
+    }
+    
+    // 点击整个上传区域时也触发文件选择
+    if (dropArea && fileInput) {
+        console.log('添加区域点击事件监听器');
+        dropArea.addEventListener('click', function(e) {
+            console.log('区域被点击，目标元素:', e.target.tagName, e.target.className);
+            
+            // 如果点击的是按钮或按钮内的元素，不做处理，让按钮自己处理
+            if (e.target === selectFileBtn || selectFileBtn.contains(e.target)) {
+                console.log('点击的是按钮，让按钮处理');
+                return;
+            }
+            
+            // 如果点击的是区域的其他地方，触发文件选择
+            console.log('点击上传区域，触发文件选择');
+            fileInput.click();
+        });
+    } else {
+        console.error('区域或文件输入元素不存在:', { dropArea: !!dropArea, fileInput: !!fileInput });
     }
     
     // 文件选择变化时处理上传
     if (fileInput) {
+        console.log('添加文件输入变化事件监听器');
         fileInput.addEventListener('change', function() {
+            console.log('文件被选择:', this.files[0]);
             handleFileUpload(this.files[0]);
         });
     }
@@ -216,13 +238,20 @@ function handleFileUpload(file) {
     
     console.log('开始上传文件:', file.name, '大小:', formatFileSize(file.size));
     
+    // 检查 smartUploadFile 函数是否可用
+    if (typeof smartUploadFile !== 'function') {
+        console.error('smartUploadFile 函数不存在，请检查 blob-direct-upload.js 是否正确加载');
+        showNotification('上传功能初始化失败，请刷新页面重试', 'error');
+        return;
+    }
+    
     // 取消之前的上传（如果有）
     if (currentUploadXhr) {
         currentUploadXhr.abort();
     }
     
-    // 使用带进度的上传函数
-    currentUploadXhr = uploadFileWithProgress(
+    // 使用智能上传函数（自动选择最佳上传方式）
+    currentUploadXhr = smartUploadFile(
         file,
         // 进度回调（支持消息和阶段）
         function(percentage, message, phase) {

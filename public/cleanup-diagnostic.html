@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件清理诊断</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .file-item {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>文件清理诊断工具</h1>
+
+    <div class="section">
+        <h2>1. 配置信息检查</h2>
+        <button onclick="checkConfig()">检查清理配置</button>
+        <div id="configInfo" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. 本地文件状态</h2>
+        <button onclick="checkLocalFiles()">检查本地文件</button>
+        <div id="localFiles" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. Blob Store文件状态</h2>
+        <button onclick="checkBlobFiles()">检查云存储文件</button>
+        <div id="blobFiles" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>4. 手动清理测试</h2>
+        <input type="file" id="testFile" accept="video/*" style="margin: 10px;">
+        <button onclick="testUploadAndCleanup()">测试上传和清理</button>
+        <div id="testResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>5. 强制清理本地文件</h2>
+        <p style="color: #dc3545;">⚠️ 注意：这将删除所有本地临时文件</p>
+        <button onclick="forceCleanup()" style="background: #dc3545;">强制清理</button>
+        <div id="cleanupResult" class="result"></div>
+    </div>
+
+    <script>
+        async function checkConfig() {
+            const resultDiv = document.getElementById('configInfo');
+            resultDiv.innerHTML = '检查中...';
+            
+            try {
+                const response = await fetch('/api/video/blob-status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>配置信息</h3>
+                        <p><strong>Blob存储启用:</strong> ${data.status.enabled ? '是' : '否'}</p>
+                        <p><strong>Token配置:</strong> ${data.status.token ? '已配置' : '未配置'}</p>
+                        <p><strong>连接状态:</strong> ${data.status.connection}</p>
+                        <p><strong>上传前缀:</strong> ${data.status.uploadPrefix}</p>
+                        <p><strong>处理前缀:</strong> ${data.status.processedPrefix}</p>
+                        ${data.status.error ? `<p style="color: red;"><strong>错误:</strong> ${data.status.error}</p>` : ''}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '检查失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        async function checkLocalFiles() {
+            const resultDiv = document.getElementById('localFiles');
+            resultDiv.innerHTML = '检查中...';
+            
+            try {
+                // 这个功能需要添加新的API端点来检查本地文件
+                const response = await fetch('/api/video/local-files-status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result';
+                    resultDiv.innerHTML = `
+                        <h3>本地文件状态</h3>
+                        <div>
+                            <h4>上传目录 (${data.uploadDir})</h4>
+                            <p>文件数量: ${data.uploadFiles.length}</p>
+                            <div class="file-list">
+                                ${data.uploadFiles.length > 0 ? 
+                                    data.uploadFiles.map(f => `<div class="file-item">${f.name} (${(f.size/1024/1024).toFixed(2)}MB, ${f.age})</div>`).join('') :
+                                    '<div class="file-item">无文件</div>'
+                                }
+                            </div>
+                        </div>
+                        <div>
+                            <h4>处理目录 (${data.processedDir})</h4>
+                            <p>文件数量: ${data.processedFiles.length}</p>
+                            <div class="file-list">
+                                ${data.processedFiles.length > 0 ? 
+                                    data.processedFiles.map(f => `<div class="file-item">${f.name} (${(f.size/1024/1024).toFixed(2)}MB, ${f.age})</div>`).join('') :
+                                    '<div class="file-item">无文件</div>'
+                                }
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '检查失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result warning';
+                resultDiv.innerHTML = '此功能需要添加新的API端点。错误: ' + error.message;
+            }
+        }
+
+        async function checkBlobFiles() {
+            const resultDiv = document.getElementById('blobFiles');
+            resultDiv.innerHTML = '检查中...';
+            
+            try {
+                const response = await fetch('/api/video/list');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const blobFiles = data.videos.filter(v => v.storage === 'blob');
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>Blob Store文件</h3>
+                        <p>总文件数: ${data.videos.length}</p>
+                        <p>云存储文件: ${blobFiles.length}</p>
+                        <p>本地存储文件: ${data.videos.length - blobFiles.length}</p>
+                        <div class="file-list">
+                            ${blobFiles.length > 0 ? 
+                                blobFiles.map(f => `<div class="file-item">${f.filename} (${(f.size/1024/1024).toFixed(2)}MB) - 云存储</div>`).join('') :
+                                '<div class="file-item">无云存储文件</div>'
+                            }
+                        </div>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '检查失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请求失败: ' + error.message;
+            }
+        }
+
+        async function testUploadAndCleanup() {
+            const fileInput = document.getElementById('testFile');
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '请选择一个视频文件';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = `开始测试上传: ${file.name} (${(file.size/1024/1024).toFixed(2)}MB)...`;
+
+            try {
+                const formData = new FormData();
+                formData.append('video', file);
+                formData.append('sessionId', 'test_' + Date.now());
+
+                const response = await fetch('/api/video/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>上传成功</h3>
+                        <p><strong>文件名:</strong> ${data.file.filename}</p>
+                        <p><strong>存储方式:</strong> ${data.file.storage}</p>
+                        <p><strong>URL:</strong> <a href="${data.file.url}" target="_blank">${data.file.url}</a></p>
+                        <p><strong>大小:</strong> ${(data.file.size/1024/1024).toFixed(2)}MB</p>
+                        ${data.file.error ? `<p style="color: orange;"><strong>警告:</strong> ${data.file.error}</p>` : ''}
+                        <p style="color: green;">文件上传完成，请检查本地目录是否已清理临时文件。</p>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '上传失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '上传出错: ' + error.message;
+            }
+        }
+
+        async function forceCleanup() {
+            const resultDiv = document.getElementById('cleanupResult');
+            resultDiv.innerHTML = '清理中...';
+            
+            try {
+                const response = await fetch('/api/video/force-cleanup', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>清理完成</h3>
+                        <p>清理的文件数量: ${data.cleanedFiles || 0}</p>
+                        <p>释放的空间: ${data.freedSpace || '未知'}</p>
+                        ${data.details ? `<pre>${data.details}</pre>` : ''}
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '清理失败: ' + data.message;
+                }
+            } catch (error) {
+                resultDiv.className = 'result warning';
+                resultDiv.innerHTML = '此功能需要添加新的API端点。错误: ' + error.message;
+            }
+        }
+
+        // 页面加载时自动检查配置
+        window.onload = function() {
+            checkConfig();
+        };
+    </script>
+</body>
+</html>

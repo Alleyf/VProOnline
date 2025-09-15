@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VProOnline - 转码演示</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 引入主题样式 -->
+    <link href="css/theme.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义主题 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#36BFFA',
+                        success: '#00B42A',
+                        warning: '#FF7D00',
+                        danger: '#F53F3F',
+                        dark: '#1D2129',
+                        'gray-light': '#F2F3F5',
+                        'gray-medium': '#C9CDD4'
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* 自定义样式 */
+        .comparison-container {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .video-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .video-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: var(--shadow-lg);
+            transition: transform 0.3s ease;
+        }
+        
+        .video-card:hover {
+            transform: translateY(-4px);
+        }
+        
+        .video-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .stat-item {
+            background: var(--bg-tertiary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            color: var(--text-tertiary);
+            font-weight: 500;
+        }
+        
+        .stat-value {
+            color: var(--text-primary);
+            font-weight: bold;
+            margin-top: 0.25rem;
+        }
+        
+        @media (max-width: 768px) {
+            .video-comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 text-dark min-h-screen">
+    <!-- 导航栏 -->
+    <header id="navbar" class="fixed w-full bg-white/90 backdrop-blur-sm shadow-sm z-50 transition-all duration-300">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                    <i class="fa fa-play-circle text-white text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold text-primary">VProOnline</h1>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <!-- 主题切换按钮 -->
+                <div class="theme-switcher">
+                    <button id="theme-btn" class="p-2 rounded-lg text-gray-600 hover:text-primary hover:bg-gray-100 transition-colors" 
+                            title="切换主题" aria-label="切换主题">
+                        <i id="theme-icon" class="fa fa-sun-o text-lg"></i>
+                    </button>
+                </div>
+                
+                <a href="/" class="px-4 py-2 text-gray-600 hover:text-primary transition-colors">
+                    <i class="fa fa-home mr-2"></i>返回首页
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="pt-20 pb-16">
+        <div class="container mx-auto px-4">
+            <!-- 页面标题 -->
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-bold mb-4">视频转码演示</h1>
+                <p class="text-gray-600 text-lg max-w-2xl mx-auto">
+                    体验VProOnline强大的视频转码功能，看看我们如何在保持质量的同时显著减小文件大小。
+                </p>
+            </div>
+
+            <!-- 视频对比展示 -->
+            <div class="max-w-6xl mx-auto">
+                <div class="comparison-container">
+                    <div class="video-comparison">
+                        <!-- 原始视频 -->
+                        <div class="video-card">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-xl font-semibold">原始视频</h3>
+                                <span class="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-sm">HD 1080p</span>
+                            </div>
+                            
+                            <div class="relative bg-gray-100 rounded-lg overflow-hidden mb-4">
+                                <video id="original-video" controls class="w-full aspect-video object-contain" preload="metadata">
+                                    <source src="assets/videos/demo-original.mp4" type="video/mp4">
+                                    <p class="text-center p-4 text-gray-500">您的浏览器不支持视频播放</p>
+                                </video>
+                            </div>
+                            
+                            <div class="video-stats">
+                                <div class="stat-item">
+                                    <div class="stat-label">分辨率</div>
+                                    <div class="stat-value">1920×1080</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">文件大小</div>
+                                    <div class="stat-value">12.4 MB</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">比特率</div>
+                                    <div class="stat-value">6.6 Mbps</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">编码</div>
+                                    <div class="stat-value">H.264 (High)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 转码后视频 -->
+                        <div class="video-card">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-xl font-semibold">转码后视频</h3>
+                                <span class="px-3 py-1 bg-success text-white rounded-full text-sm">优化压缩</span>
+                            </div>
+                            
+                            <div class="relative bg-gray-100 rounded-lg overflow-hidden mb-4">
+                                <video id="transcoded-video" controls class="w-full aspect-video object-contain" preload="metadata">
+                                    <source src="assets/videos/demo-transcoded.mp4" type="video/mp4">
+                                    <p class="text-center p-4 text-gray-500">您的浏览器不支持视频播放</p>
+                                </video>
+                            </div>
+                            
+                            <div class="video-stats">
+                                <div class="stat-item">
+                                    <div class="stat-label">分辨率</div>
+                                    <div class="stat-value">1280×720</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">文件大小</div>
+                                    <div class="stat-value">3.7 MB</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">比特率</div>
+                                    <div class="stat-value">2.0 Mbps</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">编码</div>
+                                    <div class="stat-value">H.264 (Baseline)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 播放控制面板 -->
+                <div class="bg-white rounded-xl p-6 shadow-lg mt-8">
+                    <h3 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="fa fa-play-circle text-primary mr-2"></i>
+                        播放控制
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button id="play-both" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center">
+                            <i class="fa fa-play mr-2"></i>
+                            同时播放
+                        </button>
+                        
+                        <button id="pause-both" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center">
+                            <i class="fa fa-pause mr-2"></i>
+                            同时暂停
+                        </button>
+                        
+                        <button id="toggle-sync" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors flex items-center justify-center">
+                            <i class="fa fa-link mr-2"></i>
+                            <span id="sync-status">同步：开启</span>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+                        <p><strong>提示：</strong> 您可以单独控制每个视频，或使用上方按钮同时控制。同步功能开启时，一个视频的操作会自动影响另一个。</p>
+                    </div>
+                </div>
+                
+                <!-- 对比总结 -->
+                <div class="bg-white rounded-xl p-8 shadow-lg">
+                    <h3 class="text-2xl font-bold mb-6 text-center">转码效果对比</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                                <i class="fa fa-compress text-2xl text-success"></i>
+                            </div>
+                            <h4 class="font-semibold mb-2">文件大小减少</h4>
+                            <div class="text-3xl font-bold text-success mb-2">70%</div>
+                            <p class="text-gray-600 text-sm">从 12.4MB 减少到 3.7MB</p>
+                        </div>
+                        
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                                <i class="fa fa-arrows-alt text-2xl text-primary"></i>
+                            </div>
+                            <h4 class="font-semibold mb-2">分辨率优化</h4>
+                            <div class="text-3xl font-bold text-primary mb-2">720p</div>
+                            <p class="text-gray-600 text-sm">高清质量，适合各种设备</p>
+                        </div>
+                        
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+                                <i class="fa fa-clock-o text-2xl text-warning"></i>
+                            </div>
+                            <h4 class="font-semibold mb-2">处理时间</h4>
+                            <div class="text-3xl font-bold text-warning mb-2">0.8s</div>
+                            <p class="text-gray-600 text-sm">快速高效的转码处理</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 功能特性 -->
+                    <div class="bg-gray-50 rounded-lg p-6">
+                        <h4 class="font-semibold mb-4">转码功能特性</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center mt-0.5">
+                                    <i class="fa fa-check text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <h5 class="font-medium">智能压缩算法</h5>
+                                    <p class="text-gray-600 text-sm">使用H.264编码器，在保持视觉质量的同时最大化压缩效率</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start space-x-3">
+                                <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center mt-0.5">
+                                    <i class="fa fa-check text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <h5 class="font-medium">自适应分辨率</h5>
+                                    <p class="text-gray-600 text-sm">根据内容和用途自动选择最佳分辨率和比特率</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start space-x-3">
+                                <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center mt-0.5">
+                                    <i class="fa fa-check text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <h5 class="font-medium">多格式支持</h5>
+                                    <p class="text-gray-600 text-sm">支持MP4、AVI、MOV、WebM等多种输入和输出格式</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-start space-x-3">
+                                <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center mt-0.5">
+                                    <i class="fa fa-check text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <h5 class="font-medium">快速处理</h5>
+                                    <p class="text-gray-600 text-sm">基于FFmpeg的高性能处理引擎，确保快速转码</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 行动召唤 -->
+                <div class="text-center mt-12">
+                    <h3 class="text-2xl font-bold mb-4">准备好尝试了吗？</h3>
+                    <p class="text-gray-600 mb-8">立即上传您的视频，体验专业级的转码服务</p>
+                    <div class="space-x-4">
+                        <a href="/#video-processor" class="inline-flex items-center px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                            <i class="fa fa-upload mr-2"></i>
+                            开始转码
+                        </a>
+                        <a href="/" class="inline-flex items-center px-8 py-3 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors">
+                            <i class="fa fa-home mr-2"></i>
+                            返回首页
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-8">
+        <div class="container mx-auto px-4 text-center">
+            <div class="flex items-center justify-center space-x-2 mb-4">
+                <div class="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+                    <i class="fa fa-play-circle text-primary text-lg"></i>
+                </div>
+                <h2 class="text-lg font-bold">VProOnline</h2>
+            </div>
+            <p class="text-gray-400">专业的在线视频处理平台 - 由 <a href="https://github.com/Alleyf" target="_blank" class="text-primary hover:underline">Alleyf</a> 开发</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="js/theme-manager.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取视频元素
+            const originalVideo = document.getElementById('original-video');
+            const transcodedVideo = document.getElementById('transcoded-video');
+            
+            // 视频加载状态跟踪
+            let videosReady = { original: false, transcoded: false };
+            
+            // 禁用同步播放，避免循环触发
+            let syncEnabled = true;
+            
+            // 视频预加载处理
+            function initializeVideo(video, name) {
+                // 设置预加载为 metadata，减少初始加载时间
+                video.preload = 'metadata';
+                
+                // 添加加载事件监听
+                video.addEventListener('loadedmetadata', function() {
+                    console.log(`${name}视频元数据加载完成`, {
+                        duration: video.duration,
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight,
+                        readyState: video.readyState
+                    });
+                    videosReady[name.toLowerCase()] = true;
+                    
+                    // 如果两个视频都准备好，启用同步功能
+                    if (videosReady.original && videosReady.transcoded) {
+                        enableVideoSync();
+                    }
+                });
+                
+                video.addEventListener('loadeddata', function() {
+                    console.log(`${name}视频数据加载完成`);
+                });
+                
+                video.addEventListener('canplaythrough', function() {
+                    console.log(`${name}视频可以流畅播放`);
+                });
+                
+                // 错误处理
+                video.addEventListener('error', function(e) {
+                    console.error(`${name}视频加载错误:`, e);
+                    showVideoError(video, name);
+                });
+                
+                // 播放状态监听
+                video.addEventListener('play', function() {
+                    console.log(`${name}视频开始播放`);
+                });
+                
+                video.addEventListener('pause', function() {
+                    console.log(`${name}视频暂停`);
+                });
+            }
+            
+            // 显示视频错误
+            function showVideoError(video, name) {
+                const container = video.parentNode;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'flex items-center justify-center h-full bg-gray-100 text-gray-500 p-8 absolute inset-0';
+                errorDiv.innerHTML = `
+                    <div class="text-center">
+                        <i class="fa fa-exclamation-triangle text-2xl mb-2 text-red-500"></i>
+                        <p class="font-medium">${name}视频加载失败</p>
+                        <p class="text-sm mt-2 text-gray-400">请检查网络连接或刷新页面重试</p>
+                        <button onclick="location.reload()" class="mt-3 px-4 py-2 bg-primary text-white rounded text-sm hover:bg-primary/90">
+                            刷新页面
+                        </button>
+                    </div>
+                `;
+                container.style.position = 'relative';
+                container.appendChild(errorDiv);
+            }
+            
+            // 启用视频同步功能
+            function enableVideoSync() {
+                console.log('启用视频同步功能');
+                
+                // 同步播放控制
+                function syncVideos(sourceVideo, targetVideo, sourceName, targetName) {
+                    sourceVideo.addEventListener('play', () => {
+                        if (syncEnabled && targetVideo.paused && Math.abs(targetVideo.currentTime - sourceVideo.currentTime) < 0.5) {
+                            console.log(`${sourceName}播放，同步${targetName}`);
+                            targetVideo.currentTime = sourceVideo.currentTime;
+                            targetVideo.play().catch(e => console.log('同步播放失败:', e));
+                        }
+                    });
+                    
+                    sourceVideo.addEventListener('pause', () => {
+                        if (syncEnabled && !targetVideo.paused) {
+                            console.log(`${sourceName}暂停，同步${targetName}`);
+                            targetVideo.pause();
+                        }
+                    });
+                    
+                    sourceVideo.addEventListener('seeked', () => {
+                        if (syncEnabled && Math.abs(targetVideo.currentTime - sourceVideo.currentTime) > 0.5) {
+                            console.log(`${sourceName}跳转，同步${targetName}到 ${sourceVideo.currentTime}s`);
+                            targetVideo.currentTime = sourceVideo.currentTime;
+                        }
+                    });
+                }
+                
+                // 双向同步
+                syncVideos(originalVideo, transcodedVideo, '原始视频', '转码视频');
+                syncVideos(transcodedVideo, originalVideo, '转码视频', '原始视频');
+            }
+            
+            // 初始化视频
+            initializeVideo(originalVideo, 'Original');
+            initializeVideo(transcodedVideo, 'Transcoded');
+            
+            // 播放控制按钮事件
+            document.getElementById('play-both').addEventListener('click', function() {
+                console.log('同时播放两个视频');
+                syncEnabled = false; // 临时禁用同步避免冲突
+                originalVideo.currentTime = 0;
+                transcodedVideo.currentTime = 0;
+                Promise.all([
+                    originalVideo.play().catch(e => console.log('原始视频播放失败:', e)),
+                    transcodedVideo.play().catch(e => console.log('转码视频播放失败:', e))
+                ]).then(() => {
+                    syncEnabled = true; // 重新启用同步
+                });
+            });
+            
+            document.getElementById('pause-both').addEventListener('click', function() {
+                console.log('同时暂停两个视频');
+                originalVideo.pause();
+                transcodedVideo.pause();
+            });
+            
+            document.getElementById('toggle-sync').addEventListener('click', function() {
+                const newSyncState = toggleSync();
+                const statusElement = document.getElementById('sync-status');
+                const button = document.getElementById('toggle-sync');
+                
+                if (newSyncState) {
+                    statusElement.textContent = '同步：开启';
+                    button.classList.remove('bg-gray-600');
+                    button.classList.add('bg-secondary');
+                } else {
+                    statusElement.textContent = '同步：关闭';
+                    button.classList.remove('bg-secondary');
+                    button.classList.add('bg-gray-600');
+                }
+            });
+            
+            // 手动重新加载视频的功能
+            window.reloadVideos = function() {
+                videosReady = { original: false, transcoded: false };
+                originalVideo.load();
+                transcodedVideo.load();
+            };
+            
+            // 切换同步模式
+            window.toggleSync = function() {
+                syncEnabled = !syncEnabled;
+                console.log('视频同步:', syncEnabled ? '开启' : '关闭');
+                return syncEnabled;
+            };
+        });
+        
+        // 返回首页时滚动到视频处理器
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('a[href="/#video-processor"]') || e.target.closest('a[href="/#video-processor"]')) {
+                e.preventDefault();
+                window.location.href = '/';
+                // 使用延迟确保页面加载完成后再滚动
+                setTimeout(() => {
+                    const videoProcessor = document.getElementById('video-processor');
+                    if (videoProcessor) {
+                        videoProcessor.scrollIntoView({ behavior: 'smooth' });
+                    }
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>
